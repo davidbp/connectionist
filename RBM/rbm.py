@@ -179,13 +179,13 @@ class RBM:
         assert K>0, "K value" + K + " is not valid, K must be bigger than 0"
         assert method in ["CDK", "CDK_vectorized", 'CDK_vectorized_numexpr'], "method " + method + " is not valid, please choose valid method"
 
+        t00 = time.time()
         self.lr = lr
         elements = np.array(range(X.shape[0]))
 
         for epoch in range(0, epochs):
             sys.stdout.write('\r')
             sys.stdout.write("epoch %d/ %d" %  (epoch,epochs))
-            sys.stdout.flush()
 
             t0 = time.time()
 
@@ -199,6 +199,8 @@ class RBM:
                 save_plot(lr, epoch, W=self.W)
 
             if self.monitor_time:
-                sys.stdout.write("\ttime per epoch: " + str(time.time() - t0) )
-
+                time_ep = time.time() - t0
+                time_total = time.time() - t00
+                sys.stdout.write("\ttime per epoch: " + "{0:.2f}".format(time_ep) + "\t total time: " + "{0:.2f}".format(time_total))
+                sys.stdout.flush()
 
