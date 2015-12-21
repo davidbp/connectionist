@@ -45,12 +45,34 @@ class RBM:
         self.monitor_time = monitor_time
 
         
-    def plot_weights(self):
+    def plot_weight(self, hidden_unit_j, min_max_scale = True, min_ = False, max_ = False):
+        plt.figure(figsize=(4, 4))
+
+        if type(min_) == bool:
+            min_ = self.W.T[hidden_unit_j].min()
+        if type(max_) == bool:
+            max_ = self.W.T[hidden_unit_j].max()
+
+        plt.imshow(self.W.T[hidden_unit_j].reshape((28, 28)), cmap= plt.get_cmap('gray'), vmin= min_, vmax = max_)
+        plt.xticks(())
+        plt.yticks(())
+
+
+    def plot_weights(self, min_max_scale = True, min_ = False, max_ = False):
         plt.figure(figsize=(15.2, 15))
+
+        if type(min_) == bool:
+            min_ = self.W.min()
+        if type(max_) == bool:
+            max_ = self.W.max()
 
         for i, comp in enumerate(self.W.T):
             plt.subplot(15, 15, i + 1)
-            plt.imshow(comp.reshape((28, 28)), cmap=plt.cm.gray_r, interpolation='nearest')
+            if min_max_scale:
+                plt.imshow(comp.reshape((28, 28)), cmap= plt.get_cmap('gray'), vmin=min_, vmax=max_)
+            else:
+                plt.imshow(comp.reshape((28, 28)), cmap= plt.get_cmap('gray'))
+
             plt.xticks(())
             plt.yticks(())
 
