@@ -41,6 +41,7 @@ class RBM:
         self.visible_dim = visible_dim
         self.hidden_dim = hidden_dim
 
+        self.num_epochs_trained = 0
         self.lr = 0
         self.monitor_time = monitor_time
 
@@ -53,15 +54,16 @@ class RBM:
         if type(max_) == bool:
             max_ = self.W.T[hidden_unit_j].max()
 
+
         plt.imshow(self.W.T[hidden_unit_j].reshape((28, 28)), cmap= plt.get_cmap('gray'), vmin= min_, vmax = max_)
         plt.xticks(())
         plt.yticks(())
 
 
-    def plot_weights(self, min_max_scale = True, min_ = False, max_ = False):
-        plt.figure(figsize=(15.2, 15))
+    def plot_weights(self, min_max_scale = True, min_ = None, max_ = False, folder = None):
+        plt.figure(figsize=(10, 10))
 
-        if type(min_) == bool:
+        if type(min_)== bool:
             min_ = self.W.min()
         if type(max_) == bool:
             max_ = self.W.max()
@@ -75,6 +77,11 @@ class RBM:
 
             plt.xticks(())
             plt.yticks(())
+        
+        if folder:
+            plt.suptitle('Epoch =' + str(self.num_epochs_trained ), fontsize=20)
+            plt.savefig(folder + 'epoch_' + str(self.num_epochs_trained)  + '.png', format='png')
+            plt.close()
 
     def update_params_cdk(self, Xbatch, lr=0.1, K=1):
 
@@ -192,7 +199,7 @@ class RBM:
             self.update_params_cdk_vectorized_ne(Xbatch=Xbatch, lr=lr, K=K)
 
 
-    def fit(self, X, method='CDK_vectorized', K=1, lr=0.2, epochs=1, batch_size=10, plot_weights=False):
+    def fit(self, X, method='CDK_vectorized', K=1, lr=0.2, epochs=1, batch_size=10, plot_weights=False, folder_plots = None):
         '''
         Train the RBM 
         '''
@@ -217,8 +224,10 @@ class RBM:
             for batch in batches:
                 self.fit_minibatch(X[batch, ], method, lr, K)
 
+            self.num_epochs_trained +=1
+
             if plot_weights:
-                save_plot(lr, epoch, W=self.W)
+                self.plot_weights(folder = folder_plots)
 
             if self.monitor_time:
                 time_ep = time.time() - t0
