@@ -1,18 +1,18 @@
 from timeit import default_timer as timer
 import numpy as np
 from numpy import dot as npdot
-from numpy import outer as np_outer
 import time
 import matplotlib.pyplot as plt
 import numexpr as ne
-from numexpr import evaluate 
 import sys
 # Author: David Buchaca Prats
-import numba
-from numba import jit, autojit
 
-def sig(v):
-    return ne.evaluate("1/(1 + exp(-v))")
+
+def sig(v, numexpr=False):
+    if numexpr:
+        return ne.evaluate( "1/(1 + exp(-v))")
+    else:
+        return 1/(1 + np.exp(-v))
 
 def chunks(l, n):
     """
@@ -20,6 +20,7 @@ def chunks(l, n):
     """
     for i in range(0, len(l), n):
         yield l[i:i + n]
+
 
 class RBM:
 
@@ -58,6 +59,7 @@ class RBM:
         plt.xticks(())
         plt.yticks(())
 
+
     def plot_weights(self, min_max_scale = True, min_ = None, max_ = False, folder = None):
         plt.figure(figsize=(10, 10))
 
@@ -81,7 +83,7 @@ class RBM:
             plt.savefig(folder + 'epoch_' + str(self.num_epochs_trained)  + '.png', format='png')
             plt.close()
 
-    def update_CDK(self, Xbatch, lr=0.1, K=1):
+    def update_params_cdk(self, Xbatch, lr=0.1, K=1):
 
         batch_size = Xbatch.shape[0]
 
@@ -99,7 +101,7 @@ class RBM:
             ehp = sig( npdot(x, self.W) + self.c )
             ehn = sig( npdot(xneg, self.W) + self.c)
 
-            Delta_W += lr * (np_outer(x, ehp) - np_outer(xneg, ehn))
+            Delta_W += lr * (np.outer(x, ehp) - np.outer(xneg, ehn))
             Delta_b += lr * (x - xneg)
             Delta_c += lr * (ehp - ehn)
 
@@ -107,21 +109,28 @@ class RBM:
         self.b += Delta_b * (1. / batch_size)
         self.c += Delta_c * (1. / batch_size)
 
-    
-    def update_vectorizedCDK(self, Xbatch, lr=0.1, K=1):
+
+    def update_params_cdk_vectorized(self, Xbatch, lr=0.1, K=1):
 
         batch_size = Xbatch.shape[0]
         Xneg  = Xbatch
 
         for k in range(0,K):
-            Hneg = sig( npdot(Xneg, self.W) + self.c) > np.random.random((batch_size, self.hidden_dim)).astype(np.float32)
+            Hneg = sig( npdot(Xneg , self.W) + self.c) > np.random.random((batch_size, self.hidden_dim)).astype(np.float32)
             Xneg = sig( npdot(Hneg, self.W.T) + self.b) > np.random.random((batch_size, self.visible_dim)).astype(np.float32)
 
         Ehp = sig( npdot(Xbatch, self.W) + self.c)
         Ehn = sig( npdot(Xneg, self.W) + self.c)
 
+        print "Ehp", Ehp.shape
+        print "Ehn", Ehn.shape
+        print "Hneg",Hneg.shape
+        print "Xneg",Xneg.shape
+        import pdb;pdb.set_trace()
+        
+
         Delta_W = lr * ( npdot(Xbatch.T, Ehp) -  npdot(Xneg.T, Ehn))
-        Delta_b = np.sum(lr * (Xbatch - Xneg), axis=0)
+        Delta_b =  np.sum(lr * (Xbatch - Xneg), axis=0)
         Delta_c = np.sum(lr * (Ehp - Ehn), axis=0)
 
         #error_epoch += np.sum(np.sum((Xbatch-Xneg)**2), axis = 0)
@@ -131,24 +140,23 @@ class RBM:
         self.c += Delta_c * (1. / batch_size)
 
 
-    def update_weightedCDK(self, Xbatch, lr=0.1, K=1):
-        '''
-        probs : 1d numpy.array
-                probabilities assigned to each state of the batch
-        '''
+
+    def update_params_weighted_cdk(self, Xbatch, lr=0.1, K=1):
+
         batch_size = Xbatch.shape[0]
         Xneg  = Xbatch
-        
+
         for k in range(0,K):
             Hneg = sig( npdot(Xneg , self.W) + self.c) > np.random.random((batch_size, self.hidden_dim)).astype(np.float32)
             Xneg = sig( npdot(Hneg, self.W.T) + self.b) > np.random.random((batch_size, self.visible_dim)).astype(np.float32)
-        
+
         Ehp = sig( npdot(Xbatch, self.W) + self.c)
         Ehn = sig( npdot(Xneg, self.W) + self.c)
-        
-        Delta_W = lr * (npdot(np.dot(Xbatch.T, Diagonal) , Ehp) -  npdot(Xneg.T, Ehn))
-        Delta_b = lr * npdot(Diagonal, (Xbatch - Xneg))
-        Delta_c = lr * npdot(Diagonal, (Ehp - Ehn))
+
+
+        Delta_W = lr * (npdot(Xbatch.T, Ehp) -  npdot(Xneg.T, Ehn))
+        Delta_b = np.sum(lr * (Xbatch - Xneg), axis=0)
+        Delta_c = np.sum(lr * (Ehp - Ehn), axis=0)
         #error_epoch += np.sum(np.sum((Xbatch-Xneg)**2), axis = 0)
         
         self.W += Delta_W * (1. / batch_size)
@@ -156,7 +164,29 @@ class RBM:
         self.c += Delta_c * (1. / batch_size)
 
 
-    def update_persistentCDK(self, Xbatch, lr=0.1, K=1):
+    def update_params_cdk_vectorized_ne(self, Xbatch, lr=0.1, K=1):
+
+        batch_size = Xbatch.shape[0]
+        Xneg  = Xbatch
+
+        for k in range(0,K):
+            Hneg = sig( npdot(Xneg, self.W) + self.c, numexpr=True) > np.random.random((batch_size, self.hidden_dim)).astype(np.float32)
+            Xneg = sig( npdot(Hneg, self.W.T) + self.b, numexpr=True) > np.random.random((batch_size, self.visible_dim)).astype(np.float32)
+
+        Ehp = sig( npdot(Xbatch, self.W) + self.c, numexpr=True)
+        Ehn = sig( npdot(Xneg, self.W) + self.c, numexpr=True)
+
+        Delta_W = lr * ( npdot(Xbatch.T, Ehp) -  npdot(Xneg.T, Ehn))
+        Delta_b = np.sum(lr * (Xbatch - Xneg), axis=0)
+        Delta_c = np.sum(lr * (Ehp - Ehn), axis=0)
+        #error_epoch += np.sum(np.sum((Xbatch-Xneg)**2), axis = 0)
+        
+        self.W += Delta_W * (1. / batch_size)
+        self.b += Delta_b * (1. / batch_size)
+        self.c += Delta_c * (1. / batch_size)
+
+
+    def update_params_pcd(self, Xbatch, lr=0.1, K=1):
 
         batch_size = Xbatch.shape[0]
 
@@ -164,7 +194,6 @@ class RBM:
         Delta_b = 0
         Delta_c = 0
 
-        #import pdb;pdb.set_trace()
         if self.previous_xneg is None:
             xneg = Xbatch[0]
 
@@ -178,7 +207,7 @@ class RBM:
             ehp = sig( npdot(x, self.W) + self.c )
             ehn = sig( npdot(xneg, self.W) + self.c)
 
-            Delta_W += lr * (np_outer(x, ehp) - np_outer(xneg, ehn))
+            Delta_W += lr * (np.outer(x, ehp) - np.outer(xneg, ehn))
             Delta_b += lr * (x - xneg)
             Delta_c += lr * (ehp - ehn)
 
@@ -191,27 +220,25 @@ class RBM:
         '''
         Update the current weights with the given method for the given Xbatch
         '''
-        if method == 'CDK':
-            self.update_CDK(Xbatch=Xbatch, lr=lr, K=K)
-        
-        elif method == 'vectorized_CDK':
-            self.update_vectorizedCDK(Xbatch=Xbatch, lr=lr, K=K)
 
-        elif method == 'persistent_CDK':
-            self.update_persistentCDK(Xbatch=Xbatch, lr=lr, K=K)
+        if method == 'CDK':
+            self.update_params_cdk(Xbatch=Xbatch, lr=lr, K=K)
         
-        elif method == 'weighted_CDK':
-            self.update_weightedCDK(Xbatch=Xbatch, lr=lr, K=K)
+        elif method == 'CDK_vectorized':
+            self.update_params_cdk_vectorized(Xbatch=Xbatch, lr=lr, K=K)
         
+        elif method == 'CDK_vectorized_numexpr':
+            self.update_params_cdk_vectorized_ne(Xbatch=Xbatch, lr=lr, K=K)
+
 
     def fit(self, X, method='CDK_vectorized', K=1, lr=0.2, epochs=1, batch_size=10, plot_weights=False, folder_plots = None):
         '''
         Train the RBM 
         '''
+
         assert batch_size >0
         assert K>0, "K value" + K + " is not valid, K must be bigger than 0"
-        assert method in ["CDK", 'vectorized_CDK', 'persistent_CDK','weighted_CDK'], "method " + method + " is not valid, please choose valid method"
-        self.previous_xneg = None
+        assert method in ["CDK", "CDK_vectorized", 'CDK_vectorized_numexpr'], "method " + method + " is not valid, please choose valid method"
 
         t00 = time.time()
         self.lr = lr

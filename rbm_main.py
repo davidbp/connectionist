@@ -4,7 +4,7 @@ import time
 import matplotlib.pyplot as plt
 import numexpr  as ne
 import profile
-from RBM import rbm
+import RBM
 import pandas
 
 def save_plot(lr, epochs, W, saved_models_folder):
@@ -48,7 +48,7 @@ def main():
     rbm_.plot_weights(folder = folder_plots)
 
     rbm_.fit(Xaux, 
-            method='CDK_vectorized_numexpr',
+            method='persistent_CDK',
             K=K,
             lr=lr,
             epochs=epochs,
