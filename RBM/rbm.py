@@ -92,7 +92,7 @@ class RBM:
         for x in Xbatch:
             xneg = x
         
-            for k in range(0, k):
+            for k in range(0, K):
                 hneg = sig( npdot(xneg, self.W) + self.c) > np.random.random(self.hidden_dim).astype(np.float32)
                 xneg = sig( npdot(hneg, self.W.T) + self.b) > np.random.random(self.visible_dim).astype(np.float32)
         
@@ -140,7 +140,7 @@ class RBM:
         Xneg  = Xbatch
         
         for k in range(0,K):
-            Hneg = sig( npdot(Xneg , self.W) + self.c) > np.random.random((batch_size, self.hidden_dim)).astype(np.float32)
+            Hneg = sig( npdot(Xneg, self.W) + self.c) > np.random.random((batch_size, self.hidden_dim)).astype(np.float32)
             Xneg = sig( npdot(Hneg, self.W.T) + self.b) > np.random.random((batch_size, self.visible_dim)).astype(np.float32)
         
         Ehp = sig( npdot(Xbatch, self.W) + self.c)
@@ -219,7 +219,7 @@ class RBM:
 
         for epoch in range(0, epochs):
             sys.stdout.write('\r')
-            sys.stdout.write("epoch %d/ %d" %  (epoch,epochs))
+            sys.stdout.write("epoch %d/ %d" %  (epoch+1,epochs))
 
             t0 = time.time()
 
@@ -227,7 +227,7 @@ class RBM:
             batches = list(chunks(elements, batch_size))
 
             for batch in batches:
-                self.fit_minibatch(X[batch, ], method, lr, K)
+                self.fit_minibatch(X[batch, :], method, lr, K)
 
             self.num_epochs_trained +=1
 
