@@ -23,7 +23,14 @@ def chunks(l, n):
 
 class RBM:
 
-    def __init__(self, visible_dim, hidden_dim, seed=42, mu=0, sigma=0.3, monitor_time=True):
+    def __init__(self, 
+                 visible_dim,
+                 hidden_dim, 
+                 seed=42,
+                 mu=0, 
+                 sigma=0.3,
+                 monitor_time=True):
+
         np.random.seed(seed)
         self.previous_xneg = None
         W = np.random.normal(mu, sigma, [ visible_dim, hidden_dim])
@@ -45,7 +52,12 @@ class RBM:
         self.monitor_time = monitor_time
 
         
-    def plot_weight(self, hidden_unit_j, min_max_scale = True, min_ = False, max_ = False):
+    def plot_weight(self, 
+                    hidden_unit_j, 
+                    min_max_scale = True,
+                    min_ = False,
+                    max_ = False):
+    
         plt.figure(figsize=(4, 4))
 
         if type(min_) == bool:
@@ -53,12 +65,16 @@ class RBM:
         if type(max_) == bool:
             max_ = self.W.T[hidden_unit_j].max()
 
-
         plt.imshow(self.W.T[hidden_unit_j].reshape((28, 28)), cmap= plt.get_cmap('gray'), vmin= min_, vmax = max_)
         plt.xticks(())
         plt.yticks(())
 
-    def plot_weights(self, min_max_scale = True, min_ = None, max_ = False, folder = None):
+    def plot_weights(self, 
+                     min_max_scale = True, 
+                     min_ = None, 
+                     max_ = False, 
+                     folder = None):
+                     
         plt.figure(figsize=(10, 10))
 
         if type(min_)== bool:
@@ -81,7 +97,10 @@ class RBM:
             plt.savefig(folder + 'epoch_' + str(self.num_epochs_trained)  + '.png', format='png')
             plt.close()
 
-    def update_CDK(self, Xbatch, lr=0.1, K=1):
+    def update_CDK(self, 
+                   Xbatch, 
+                   lr=0.1,
+                   K=1):
 
         batch_size = Xbatch.shape[0]
 
@@ -108,7 +127,10 @@ class RBM:
         self.c += Delta_c * (1. / batch_size)
 
     
-    def update_vectorizedCDK(self, Xbatch, lr=0.1, K=1):
+    def update_vectorizedCDK(self, 
+                             Xbatch,
+                             lr=0.1,
+                             K=1):
 
         batch_size = Xbatch.shape[0]
         Xneg  = Xbatch
@@ -131,7 +153,10 @@ class RBM:
         self.c += Delta_c * (1. / batch_size)
 
 
-    def update_weightedCDK(self, Xbatch, lr=0.1, K=1):
+    def update_weightedCDK(self,
+                           Xbatch,
+                           lr=0.1,
+                           K=1):
         '''
         probs : 1d numpy.array
                 probabilities assigned to each state of the batch
@@ -156,7 +181,10 @@ class RBM:
         self.c += Delta_c * (1. / batch_size)
 
 
-    def update_persistentCDK(self, Xbatch, lr=0.1, K=1):
+    def update_persistentCDK(self, 
+                             Xbatch,
+                             lr=0.1, 
+                             K=1):
 
         batch_size = Xbatch.shape[0]
 
@@ -187,7 +215,11 @@ class RBM:
         self.c += Delta_c * (1. / batch_size)
 
 
-    def fit_minibatch(self, Xbatch, method='CDK_vectorized', lr=0.2, K=5):
+    def fit_minibatch(self,
+                      Xbatch,
+                      method='CDK_vectorized',
+                      lr=0.2,
+                      K=5):
         '''
         Update the current weights with the given method for the given Xbatch
         '''
@@ -204,7 +236,15 @@ class RBM:
             self.update_weightedCDK(Xbatch=Xbatch, lr=lr, K=K)
         
 
-    def fit(self, X, method='CDK_vectorized', K=1, lr=0.2, epochs=1, batch_size=10, plot_weights=False, folder_plots = None):
+    def fit(self, 
+            X,
+            method='CDK_vectorized',
+            K=1,
+            lr=0.2,
+            epochs=1, 
+            batch_size=10, 
+            plot_weights=False, 
+            folder_plots=None):
         '''
         Train the RBM 
         '''
