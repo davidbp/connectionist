@@ -215,6 +215,13 @@ class RBM:
         self.c += Delta_c * (1. / batch_size)
 
 
+    def propup(self, visible_vector):
+        '''
+        This function propagates the visible units activation upwards to
+        the hidden units.
+        '''
+        return sig(npdot(visible_vector, self.W) + self.c)
+
     def fit_minibatch(self,
                       Xbatch,
                       method='CDK_vectorized',
