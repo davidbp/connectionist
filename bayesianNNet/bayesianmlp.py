@@ -15,8 +15,8 @@ std_val = 0.01
 n_hidden = 3
 input_dim = 2
 output_dim = 1
-
-# Initialize random weights between each layer
+#
+ Initialize random weights between each layer
 init_w1 = np.random.randn(input_dim , n_hidden)
 init_b1 = np.random.randn(n_hidden)
 
