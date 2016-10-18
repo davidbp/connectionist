@@ -31,9 +31,9 @@ class MDNRegressor(BaseEstimator, RegressorMixin):
     
     def __init__(self,
                  hidden_layer_size,
-                 n_components = 5,
+                 n_components=5,
                  activation="tanh",
-                 batch_size= "auto",
+                 batch_size="auto",
                  shuffle=True,
                  n_epochs=200000):
         
@@ -43,7 +43,8 @@ class MDNRegressor(BaseEstimator, RegressorMixin):
         self.batch_size = batch_size
         self.shuffle = shuffle
         self.n_epochs = n_epochs
-            
+    
+
     def _initialize_in_fit(self, 
                            n_features,
                            n_hidden, 
@@ -68,7 +69,8 @@ class MDNRegressor(BaseEstimator, RegressorMixin):
                             'b_variance': np.zeros(n_components, ),
                             'b_mean': np.zeros(n_components, ),
                             'b_mix_coeff':  np.zeros(n_components, )}
-            
+    
+    
     def predict_statistics(self, X):
         """
         For each of the K components predicts
@@ -88,15 +90,53 @@ class MDNRegressor(BaseEstimator, RegressorMixin):
             raise ValueError("shuffle must be either True or False, got %s." %
                              self.shuffle)       
     
+
     def _validate_input(self, X, y, incremental):
     
         if y.ndim == 2 and y.shape[1] == 1:
             y = column_or_1d(y, warn=True)
         return X, y
     
+
     def _forward_pass(self, X):
         activations = [X]
+
+
+    def _compute_loss(self, X, y):
+        """
+        Returns the probability
+        """
         
+        # If y is a row vector rewrite it as column vector
+        if y.ndim == 1:
+            y = y.reshape((-1, 1))            
+        
+        ### Forward pass ###
+        act_h1 = np.tanh( np.dot(X, self.coefs_['W_1']) + self.intercepts_['b_1']  )
+        
+        act_means = np.dot(act_h1, self.coefs_['W_mean']) + self.intercepts_['b_mean']
+        act_variances = np.exp(np.dot(act_h1,self.coefs_['W_variance']) + self.intercepts_['b_variance'])
+        act_mixing_coeff = softmax(np.dot(act_h1,self.coefs_['W_mix_coeff']) + self.intercepts_['b_mix_coeff'])
+        
+        ###
+        ### Compute Loss (- mean log-likelihood)
+        ###
+        n_samples, n_components = act_means.shape
+        
+        # prob_per_sample has shape (n_components, n_samples)
+        prob_per_sample = np.exp(-((y - act_means)**2)/(2*act_variances**2))/(act_variances*np.sqrt(2*np.pi))
+
+        pin = act_mixing_coeff * prob_per_sample
+        # logprob has shape (1,n_samples)
+        logprob = -np.log(np.sum(pin, axis=1, keepdims=True))
+        loss = np.sum(logprob)/n_samples
+        #import pdb;pdb.set_trace()
+        
+        stats = {}
+        stats["loss"] = loss
+        stats["logprob"] = logprob
+        return stats
+
 
     def _compute_loss(self, X, y):
         """
@@ -125,11 +165,13 @@ class MDNRegressor(BaseEstimator, RegressorMixin):
         pin = act_mixing_coeff * prob_per_sample
         # logprob has shape (1,n_samples)
         logprob = -np.log(np.sum(pin, axis=1, keepdims=True))
+
         loss = np.sum(logprob)/n_samples
-        #import pdb;pdb.set_trace()
         
         stats = {}
-        stats["lp"] = loss
+        stats["loss"] = loss
+        stats["elementwise_logprop"] = logprob
+
         return stats
 
 
@@ -137,10 +179,9 @@ class MDNRegressor(BaseEstimator, RegressorMixin):
         
         ### Forward pass ###
         act_h1 = np.tanh( np.dot(X, self.coefs_['W_1']) + self.intercepts_['b_1']  )
-        
         act_means = np.dot(act_h1, self.coefs_['W_mean']) + self.intercepts_['b_mean']
-        act_variances = np.exp(np.dot(act_h1,self.coefs_['W_variance']) + self.intercepts_['b_variance'])
-        act_mixing_coeff = softmax(np.dot(act_h1,self.coefs_['W_mix_coeff']) + self.intercepts_['b_mix_coeff'])
+        act_variances = np.exp(np.dot(act_h1, self.coefs_['W_variance']) + self.intercepts_['b_variance'])
+        act_mixing_coeff = softmax(np.dot(act_h1, self.coefs_['W_mix_coeff']) + self.intercepts_['b_mix_coeff'])
         
         ###
         ### Compute Loss (- mean log-likelihood)
@@ -152,7 +193,7 @@ class MDNRegressor(BaseEstimator, RegressorMixin):
         pin = act_mixing_coeff * prob_per_sample
         
         # logprob has shape (1,n_samples)
-        logprob = -np.log(np.sum(pin, axis=0, keepdims=True))
+        logprob = -np.log(np.sum(pin, axis=1, keepdims=True))
         loss = np.sum(logprob)/n_samples
 
         ###
@@ -179,8 +220,6 @@ class MDNRegressor(BaseEstimator, RegressorMixin):
              np.dot(self.coefs_['W_variance'], dlogsig.T) +\
              np.dot(self.coefs_['W_mix_coeff'], dpiu.T)
 
-        #import pdb; pdb.set_trace()
-        
         dh = (1.0 - act_h1**2)*dh.T
         grads['W_1'] = np.sum(dh, axis=0)       
         grads['b_1'] = np.dot(dh.T, X).flatten()
@@ -251,9 +290,9 @@ class MDNRegressor(BaseEstimator, RegressorMixin):
                 mem[k] += grads[k]**2
                 
                 if k in self.coefs_:
-                    self.coefs_[k] += -learning_rate * grads[k] / np.sqrt(mem[k] + 1e-8)
+                    self.coefs_[k] += -learning_rate * grads[k] # / np.sqrt(mem[k] + 1e-6)
                 else:
-                    self.intercepts_[k] += -learning_rate * grads[k] / np.sqrt(mem[k] + 1e-8)                
+                    self.intercepts_[k] += -learning_rate * grads[k] #/ np.sqrt(mem[k] + 1e-6)                
         
             
     def fit(self, X, y):
