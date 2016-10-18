@@ -150,6 +150,46 @@ class MDNRegressor(BaseEstimator, RegressorMixin):
 
         return stats
 
+    def predict(self, x):
+
+        # ferform forward pass and get only a point estimate
+
+        # forward pass
+        h = np.tanh(np.dot(self.m['Wxh'], x) + self.m['bxh'])
+        
+        # predict mean
+        mu = np.dot(self.m['Whu'], h) + self.m['bhu']
+        return mu.T
+
+
+    def predict_best_estimate(self, x):
+        mu, _,  pi = self.predict_distribution(x)
+
+        preds = []
+        for k in range(len(mu)):
+            chosen_mode = np.argmax(pi[k])
+            chosen_mean = means[k][chosen_mode]
+            preds.append(chosen_mean)
+
+        best_mus = np.array(best_mus)
+        return best_mus
+
+
+    def predict_distribution(self, x):
+        # forward pass
+        h = np.tanh(np.dot(self.m['Wxh'], x) + self.m['bxh'])
+        
+        # predict mean
+        mu = np.dot(self.m['Whu'], h) + self.m['bhu']
+        
+        # predict log variance
+        logsig = np.dot(self.m['Whs'], h) + self.m['bhs']
+        sig = np.exp(logsig)
+        
+        # predict mixture priors
+        piu = np.dot(self.m['Whp'], h) + self.m['bhp'] # unnormalized pi
+        pi = softmax(piu)
+        return (mu.T, sig.T, pi.T)
 
     def _compute_grads(self, x, y):
         
