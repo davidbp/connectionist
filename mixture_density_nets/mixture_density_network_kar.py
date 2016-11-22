@@ -11,6 +11,7 @@ def softmax(x):
     en = e / np.sum(e, axis=0, keepdims=True)
     return en
 
+
 class MDNRegressor(BaseEstimator, RegressorMixin):
 
     """
@@ -36,7 +37,8 @@ class MDNRegressor(BaseEstimator, RegressorMixin):
                  activation="tanh",
                  batch_size="auto",
                  shuffle=True,
-                 n_epochs=200000):
+                 n_epochs=5000,
+                 verbose=2):
         
         self.hidden_layer_size = hidden_layer_size
         self.n_components = n_components
@@ -44,12 +46,8 @@ class MDNRegressor(BaseEstimator, RegressorMixin):
         self.batch_size = batch_size
         self.shuffle = shuffle
         self.n_epochs = n_epochs
+        self.verbose = verbose
 
-        #Initialize model
-        self._initialize_in_fit(n_features=1,
-                                n_hidden=hidden_layer_size,
-                                n_outputs= 1,
-                                n_components=self.n_components)
 
     def _initialize_in_fit(self, 
                            n_features,
@@ -79,12 +77,11 @@ class MDNRegressor(BaseEstimator, RegressorMixin):
         m['bhs'] = np.random.randn(K, 1) * 0.01
         m['bhp'] = np.random.randn(K, 1) * 0.01
 
-        print("hidden size:", hidden_size)
-        print("input size:", input_size)
-        print("K (num components):", K)
-
-
+        #print("hidden size:", hidden_size)
+        #print("input size:", input_size)
+        #print("K (num components):", K)
         self.m = m
+
     
     def predict_statistics(self, X):
         """
@@ -134,7 +131,7 @@ class MDNRegressor(BaseEstimator, RegressorMixin):
         
         # predict mixture priors
         piu = np.dot(m['Whp'], h) + m['bhp'] # unnormalized pi
-        pi = softmax(piu)
+        pi = softmax(piu) # equation 5.150 Pattern Recognition and machine learning
         
         # compute the loss: mean negative data log likelihood
         k,n = mu.shape # number of mixture components
@@ -150,7 +147,8 @@ class MDNRegressor(BaseEstimator, RegressorMixin):
 
         return stats
 
-    def predict(self, x):
+
+    def predict_all_modes(self, x):
 
         # ferform forward pass and get only a point estimate
 
@@ -162,17 +160,19 @@ class MDNRegressor(BaseEstimator, RegressorMixin):
         return mu.T
 
 
-    def predict_best_estimate(self, x):
-        mu, _,  pi = self.predict_distribution(x)
+    def predict(self, x):
+        """
+        Predicts the best point estimate according to all the modes
+        """
+        mu, _,  pi = self.predict_distribution(x.T)
 
         preds = []
         for k in range(len(mu)):
             chosen_mode = np.argmax(pi[k])
-            chosen_mean = means[k][chosen_mode]
+            chosen_mean = mu[k][chosen_mode]
             preds.append(chosen_mean)
 
-        best_mus = np.array(best_mus)
-        return best_mus
+        return np.array(preds)
 
 
     def predict_distribution(self, x):
@@ -190,6 +190,7 @@ class MDNRegressor(BaseEstimator, RegressorMixin):
         piu = np.dot(self.m['Whp'], h) + self.m['bhp'] # unnormalized pi
         pi = softmax(piu)
         return (mu.T, sig.T, pi.T)
+
 
     def _compute_grads(self, x, y):
         
@@ -223,7 +224,7 @@ class MDNRegressor(BaseEstimator, RegressorMixin):
         gammas = pin / np.sum(pin, axis=0, keepdims = True)
         dmu = gammas * ((mu - y)/sig**2) /n
         dlogsig = gammas * (1.0 - (y-mu)**2/(sig**2)) /n
-        dpiu = (pi - gammas) /n
+        dpiu = (pi - gammas) /n  # eq. 5.155 Pattern Recognition and machine learning
         
         # backprop to decoder matrices
         grad['bhu'] = np.sum(dmu, axis=1, keepdims=True)
@@ -247,10 +248,9 @@ class MDNRegressor(BaseEstimator, RegressorMixin):
         stats = {}
         stats['lp'] = lp
         return loss, grad, stats
-        
-        
-        
-    def _fit(self, X, y, n_epochs = 20000, n_epochs_to_print=1000):
+
+
+    def _fit(self, X, y, n_epochs = 4000, n_epochs_to_print=1000):
         """
         Train the model
         """
@@ -262,7 +262,6 @@ class MDNRegressor(BaseEstimator, RegressorMixin):
         hidden_layer_size = self.hidden_layer_size
         n_epochs = self.n_epochs
       
-
         self.n_outputs_ = 1
         n_features = X.shape[0]
         
@@ -281,27 +280,22 @@ class MDNRegressor(BaseEstimator, RegressorMixin):
         mem = {}
         for k in self.m.keys(): 
             mem[k] = np.zeros_like(self.m[k]) 
-
-
-        print("X shape:", X.shape)
-        print("y  shape:", y.shape)
-
         
-        #nb = n_samples #full batch
-        #xbatch = np.reshape(X[:nb], (1,nb))
-        #ybatch = np.reshape(Y[:nb], (1,nb))
+        #print("X shape:", X.shape)
+        #print("y  shape:", y.shape)
         
         for epoch in range(n_epochs):
             
             loss, grads , _ = self._compute_grads(X, y)
 
-            if epoch % n_epochs_to_print == 0:
-                print ("epoch: ", epoch, "loss: ", loss)
+            if self.verbose > 3:
+                if epoch % n_epochs_to_print == 0:
+                    print ("epoch: ", epoch, "loss: ", loss)
 
             for k,v in grads.items():
                 mem[k] += grads[k]**2
-                self.m[k] += -learning_rate * grads[k]  / np.sqrt(mem[k] + 1e-6)
+                self.m[k] += -learning_rate * grads[k] / np.sqrt(mem[k] + 1e-6)
 
             
     def fit(self, X, y):
-        return self._fit(X, y)
+        return self._fit(X.T, y)
