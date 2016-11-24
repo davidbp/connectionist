@@ -59,33 +59,35 @@ class MLPRegression(object):
         # initialize the weights and biases of the mlp
         self._init_all_weights(dims)
 
-         # Define how to find the output of the model given the parameters of the model during training
-        self.output_for_sym_Xbatch_dropout = self.output_given_input_train(self.sym_Xbatch, self.W, self.b)
+        #### Symbolic computations train time (dropout makes forward propagation stochastic)
 
-         # Define how to find the output of the model given the parameters of the model during training
-        self.output_for_sym_Xbatch = self.output_given_input_evaluation(self.sym_Xbatch, self.W, self.b)
+        # Define how to find the output of the model given the parameters of the model during training
+        self.output_for_sym_Xbatch_traintime = self.output_given_input_traintime(self.sym_Xbatch, self.W, self.b)
 
         # Define a cost function, must be defined using
-        self.sym_cost = T.mean((self.output_for_sym_Xbatch_dropout - self.sym_Ybatch)**2)
+        self.sym_cost_traintime = T.mean((self.output_for_sym_Xbatch_traintime - self.sym_Ybatch)**2)
 
         # Define a method for updating the parameters of the network
-        self.sym_updates = self._updates_sgd(self.sym_cost, self.params)
+        self.sym_updates = self._updates_sgd(self.sym_cost_traintime, self.params)
         
         # Define a supervised training procedurea
         self.tfunc_fit_mini_batch = theano.function(inputs=[self.sym_Xbatch, self.sym_Ybatch], 
-                                                    outputs=self.sym_cost,
+                                                    outputs=self.sym_cost_traintime,
                                                     updates=self.sym_updates,
                                                     allow_input_downcast = True)
+
+        #### Symbolic computations test time (dropout does not make predictions stochastic)
+
+        # Define how to find the output of the model given the parameters of the model during training
+        self.output_for_sym_Xbatch_testime = self.output_given_input_evaluation(self.sym_Xbatch, self.W, self.b)
+
+        # Define a cost function, at test time
+        self.sym_cost_testtime = T.mean((self.output_for_sym_Xbatch_testime - self.sym_Ybatch)**2)
         
         # Define a function to the the predicted class for a set of inputs
         self.tfunc_predict = theano.function(inputs=[self.sym_Xbatch],
-                                             outputs=self.output_for_sym_Xbatch, 
+                                             outputs=self.output_for_sym_Xbatch_testime, 
                                              allow_input_downcast = True)
-
-        # Define a function to the the predicted class for a set of inputs
-        #self.tfunc_predict_evaluation = theano.function(inputs=[self.sym_Xbatch],
-        #                                         outputs=self.output_for_sym_Xbatch, 
-        #                                         allow_input_downcast = True)
 
 
     def _init_activations(self, activations):
@@ -130,7 +132,6 @@ class MLPRegression(object):
         """
         np.random.seed(self.seed)
         return theano.shared(floatX(np.random.normal(np.zeros(shape), scale=scale)/np.sqrt(shape[0])))
- 
 
     def dropout(self, incoming_input, layer_size, p):
         srng = theano.tensor.shared_randomstreams.RandomStreams(self.seed)
@@ -150,18 +151,17 @@ class MLPRegression(object):
 
         return updates
      
-    def output_given_input_train(self, X, Ws, bs):
+    def output_given_input_traintime(self, X, Ws, bs):
         """
-        Predicts the output of the network.
+        Predicts the output of the network for a minibatch at train time.
         """
-        n_layers = len(Ws)
+        output_layer= len(Ws)
         current_layer = 0
 
         for W, b, activation in zip(Ws, bs, self.activations):
             X = activation(T.dot(X, W) + b)
             current_layer += 1
-            #import pdb;pdb.set_trace()
-            if current_layer < len(Ws) and self.dropout_prob>0 :
+            if current_layer != output_layer and self.dropout_prob > 0 :
                 X = self.dropout(X, layer_size = int(W.shape[1].eval()), p = self.dropout_prob)
 
         return X
@@ -169,14 +169,15 @@ class MLPRegression(object):
 
     def output_given_input_evaluation(self, X, Ws, bs):
         """
-        Predicts the output of the network.
+        Predicts the output of the network for a minibatch at test time.
         """
-        n_layers = len(Ws)
-        current_layer = 0
+        output_layer = len(Ws)
+        current_layer  =  0
 
         for W, b, activation in zip(Ws, bs, self.activations):
-            if self.dropout_prob>0:
-                X = activation(T.dot(X, W) + b)*self.dropout_prob
+            current_layer += 1
+            if self.dropout_prob > 0 and current_layer != output_layer:
+                X = activation(T.dot(X, W) + b) * self.dropout_prob
             else:
                 X = activation(T.dot(X, W) + b)
 
@@ -227,16 +228,17 @@ class MLPRegression(object):
         """
         return self.tfunc_predict(X)
 
-    def compute_sym_cost(self, X, Y):
+    def compute_cost_(self, X, Y):
         """
         Returns the cost for a given set of data X,Y.
         """
         yhat_batch =  self.output_given_input_evaluation(X, self.W, self.b)
-        return T.mean((yhat_batch - Y)**2)
+        return T.mean((yhat_batch - Y)**2).eval()
 
     def compute_cost(self, X, Y):
         """º
         Returns the cost for a given set of data X,Y.
         """
-        return self.compute_sym_cost(X, Y).eval()
+        import pdb;pdb.set_trace()
+        return self.sym_cost_testtime(X, Y).eval()
 
