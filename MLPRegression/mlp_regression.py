@@ -5,6 +5,7 @@ import time
 from theano.tensor.shared_randomstreams import RandomStreams
 from theano import tensor as T
 from sklearn.preprocessing import OneHotEncoder
+
 srng = RandomStreams(seed=100)
 
 
@@ -25,6 +26,12 @@ def relu(X):
 def identity(X):
     return X
 
+def sym_mean_squared_error(Ybatch_hat, Ybatch):
+    return T.mean((Ybatch_hat - Ybatch)**2)
+
+def sym_mean_absolute_percentage_error(Ybatch_hat, Ybatch):
+    return T.mean(T.abs_((Ybatch - Ybatch_hat)/ Ybatch))
+
 
 class MLPRegression(object):
     """
@@ -34,11 +41,13 @@ class MLPRegression(object):
     
     def __init__(self, dims, activations, 
                              learning_rate=0.01, 
-                             seed=1,
+                             seed=1234,
                              max_iter=200,
                              momentum=0.9,
                              batch_size=200,
-                             dropout_prob = -1):
+                             dropout_prob = -1,
+                             loss="mean_squared_error",
+                             random_state=1234):
 
         # Save all hyperparameters
         self.learning_rate = learning_rate
@@ -49,7 +58,8 @@ class MLPRegression(object):
         self.momentum = momentum
         self.batch_size = batch_size
         self.dropout_prob = dropout_prob
-
+        self.loss_curve_ = None
+        self.loss_curve_validation_ = None
         self.sym_Xbatch = T.matrix("sym_Xbatch")
         self.sym_Ybatch = T.matrix("sym_Ybatch")
  
@@ -63,9 +73,14 @@ class MLPRegression(object):
 
         # Define how to find the output of the model given the parameters of the model during training
         self.output_for_sym_Xbatch_traintime = self.output_given_input_traintime(self.sym_Xbatch, self.W, self.b)
+        
+        if loss == 'mean_squared_error':
+            self.sym_cost_traintime = sym_mean_squared_error(self.output_for_sym_Xbatch_traintime, self.sym_Ybatch)
+            self.cost = sym_mean_squared_error
 
-        # Define a cost function, must be defined using
-        self.sym_cost_traintime = T.mean((self.output_for_sym_Xbatch_traintime - self.sym_Ybatch)**2)
+        if loss == 'mean_absolute_percentage_error':
+            self.sym_cost_traintime = sym_mean_absolute_percentage_error(self.output_for_sym_Xbatch_traintime, self.sym_Ybatch)
+            self.cost = sym_mean_absolute_percentage_error
 
         # Define a method for updating the parameters of the network
         self.sym_updates = self._updates_sgd(self.sym_cost_traintime, self.params)
@@ -77,7 +92,6 @@ class MLPRegression(object):
                                                     allow_input_downcast = True)
 
         #### Symbolic computations test time (dropout does not make predictions stochastic)
-
         # Define how to find the output of the model given the parameters of the model during training
         self.output_for_sym_Xbatch_testime = self.output_given_input_evaluation(self.sym_Xbatch, self.W, self.b)
 
@@ -134,20 +148,26 @@ class MLPRegression(object):
         return theano.shared(floatX(np.random.normal(np.zeros(shape), scale=scale)/np.sqrt(shape[0])))
 
     def dropout(self, incoming_input, layer_size, p):
+        """
+        Dropout some units of the incoming_input (minibatch of activations of a particular layer).
+        """
         srng = theano.tensor.shared_randomstreams.RandomStreams(self.seed)
         mask = srng.binomial(n=1, p=1-p, size=list([layer_size]), dtype= theano.config.floatX)
-
         output = incoming_input * T.cast(mask, theano.config.floatX)
         return output # / (1 - p)
 
-    def _updates_sgd(self, cost, params):
+    def _updates_sgd(self, cost, params, optimizer ='SGD'):
         """
         Method used to define a list of symbolic updates for theano
         """
         grads = theano.tensor.grad(cost=cost, wrt=params)
         updates = []
-        for param,grad in zip(params, grads):
-            updates.append([param, param - grad * self.learning_rate ])
+
+        if optimizer == 'SGD':
+            for param,grad in zip(params, grads):
+                updates.append([param, param - grad * self.learning_rate ])
+        
+        #elif optimizer == 'SGDmomentum'
 
         return updates
      
@@ -166,7 +186,6 @@ class MLPRegression(object):
 
         return X
      
-
     def output_given_input_evaluation(self, X, Ws, bs):
         """
         Predicts the output of the network for a minibatch at test time.
@@ -183,44 +202,59 @@ class MLPRegression(object):
 
         return X
      
-
     def partial_fit(self, X, y):
         """
         Fit the model for a given minibatch
         """
         # Ensure y has ndim=2 (targets are passed as column vector)
         if y.ndim == 1:
+            print("\nWarning: y has been reshaped because it had shape:", y.shape)
             y = y.reshape((-1, 1))
         
         cost_minibatch = self.tfunc_fit_mini_batch(X, y)
         return cost_minibatch
 
-    def fit(self, X, y, n_epochs = 100):
+    def fit(self, X, y, X_val=None, y_val=None, n_epochs = 100):
         """
         Fit the MLP.
         For each epoch and for each minibatch change the weights in the model.
+
         The function that changes the weights is the partial_fit function which
         calls self.tfunc_fit_mini_batch
         """
 
-        # Get number of instances and number of features
         n_samples, n_features = X.shape
+        np.random.RandomState(self.seed)
+        permutation = np.random.permutation(n_samples)
+        
+        if not self.loss_curve_:
+            self.loss_curve_ = []
+            self.loss_curve_validation_ = []
 
-        # Ensure y has ndim=2 
+        n_batches = len([permutation[x: x + self.batch_size] for x in range(0, n_samples, self.batch_size)])
+        if n_batches == 0:
+            print("\nWarning: batch_size bigger than number of examples", y.shape)
+
         if y.ndim == 1:
-            print("\ny has been reshaped because it had shape:", y.shape)
+            print("\nWarning: y has been reshaped as column vector because it had shape:", y.shape)
             y = y.reshape((-1, 1))
-
-        y = OneHotEncoder(sparse=False).fit_transform(y)
-
+        
         self.n_outputs_ = y.shape[1]
-
-        #layer_units = ([n_features] + hidden_layer_sizes + [self.n_outputs_])
+        
         for epoch in range(n_epochs):
-            for i in range(0, n_samples - self.batch_size, self.batch_size):
-                # WARNING: We can do this without slicing arrays
-                # we can do it in the theano way passing only indicies
-                self.partial_fit(X[i: i + self.batch_size], y[i: i + self.batch_size])
+            epoch_loss_aprox = 0
+            for batch_indicies in [permutation[x: x + self.batch_size] for x in range(0, n_samples, self.batch_size)]:
+                # WARNING: We can do this without slicing arrays we can do it in the theano way passing only indicies
+                epoch_loss_aprox += self.partial_fit(X[batch_indicies], y[batch_indicies])
+            
+            if X_val is not None:
+                yhat_validation =  self.output_given_input_evaluation(X_val, self.W, self.b)
+                self.loss_curve_validation_.append(self.cost(yhat_validation, y_val).eval())
+
+            np.random.RandomState(self.seed + epoch)
+            permutation = np.random.permutation(n_samples)
+            self.loss_curve_.append(epoch_loss_aprox/n_batches)
+
 
     def predict(self, X):
         """
@@ -233,12 +267,11 @@ class MLPRegression(object):
         Returns the cost for a given set of data X,Y.
         """
         yhat_batch =  self.output_given_input_evaluation(X, self.W, self.b)
-        return T.mean((yhat_batch - Y)**2).eval()
+        return self.sym_cost_traintime
 
     def compute_cost(self, X, Y):
-        """º
+        """
         Returns the cost for a given set of data X,Y.
         """
-        import pdb;pdb.set_trace()
-        return self.sym_cost_testtime(X, Y).eval()
-
+        yhat_batch =  self.output_given_input_evaluation(X, self.W, self.b)
+        return self.sym_cost_traintime.eval()
