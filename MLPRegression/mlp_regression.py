@@ -113,13 +113,13 @@ class MLPRegression(object):
                                    "identity": identity }
         
         # Check the given activations are allowed
-        for activation in activations:
-            assert(activation in implemented_activations, 'One of the activations was not allowed')
-
+        #for activation in activations:
+        #    assert(activation in implemented_activations, 'One of the activations was not allowed')
+        
         activations_initialized = []
         for activation in activations:
             activations_initialized.append(implemented_activations[activation])
-
+        
         return activations_initialized
 
     def _init_all_weights(self, dims, verbose=0):
@@ -147,13 +147,17 @@ class MLPRegression(object):
         np.random.seed(self.seed)
         return theano.shared(floatX(np.random.normal(np.zeros(shape), scale=scale)/np.sqrt(shape[0])))
 
-    def dropout(self, incoming_input, layer_size, p):
+    def dropout(self, activation_minibatch, p):
         """
-        Dropout some units of the incoming_input (minibatch of activations of a particular layer).
+        Dropout some units of the activation_minibatch (minibatch of activations of a particular layer).
+        
+        p: probability of dropout activations in the minibatch (sampling 0 in the binomial that generates the mask)
+        THe implementation of  srng.binomial admits a p parameter that samples 1 with prob p
+        Therefore probability of dropping out is 1-p
         """
         srng = theano.tensor.shared_randomstreams.RandomStreams(self.seed)
-        mask = srng.binomial(n=1, p=1-p, size=list([layer_size]), dtype= theano.config.floatX)
-        output = incoming_input * T.cast(mask, theano.config.floatX)
+        mask = srng.binomial(n=1, p=1-p, size=activation_minibatch.shape, dtype= theano.config.floatX)
+        output = activation_minibatch * T.cast(mask, theano.config.floatX)
         return output # / (1 - p)
 
     def _updates_sgd(self, cost, params, optimizer ='SGD'):
@@ -182,7 +186,7 @@ class MLPRegression(object):
             X = activation(T.dot(X, W) + b)
             current_layer += 1
             if current_layer != output_layer and self.dropout_prob > 0 :
-                X = self.dropout(X, layer_size = int(W.shape[1].eval()), p = self.dropout_prob)
+                X = self.dropout(X, p = self.dropout_prob)
 
         return X
      
@@ -196,7 +200,7 @@ class MLPRegression(object):
         for W, b, activation in zip(Ws, bs, self.activations):
             current_layer += 1
             if self.dropout_prob > 0 and current_layer != output_layer:
-                X = activation(T.dot(X, W) + b) * self.dropout_prob
+                X = activation(T.dot(X, W) + b) * (1 - self.dropout_prob)
             else:
                 X = activation(T.dot(X, W) + b)
 
