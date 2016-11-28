@@ -8,9 +8,10 @@ from sklearn.preprocessing import OneHotEncoder
 
 srng = RandomStreams(seed=100)
 
+# https://gist.github.com/SercanKaraoglu/c39d472497a13f32c592
+# https://gist.github.com/kastnerkyle/816134462577399ee8b2#file-optimizers-py-L59
+# https://github.com/lisa-lab/pylearn2/pull/1030
 
- # https://gist.github.com/SercanKaraoglu/c39d472497a13f32c592
- 
 def softmax(X):
     # Use the following line (for numerical stability reasons)
     e_x = T.exp(X -X.max(axis=1).dimshuffle(0,'x'))
@@ -37,16 +38,16 @@ class MLPRegression(object):
     """
     Class implementing a feedforward neuralnetwork (multilayer perceptron).
     This class assumes the objective of the model is to perform Regresison
-    """
-    
+    """    
     def __init__(self, dims, activations, 
                              learning_rate=0.01, 
                              seed=1234,
                              max_iter=200,
-                             momentum=0.9,
                              batch_size=200,
                              dropout_prob = -1,
-                             loss="mean_squared_error",
+                             loss='mean_squared_error',
+                             optimizer='SGD_momentum',
+                             momentum=0.9,
                              random_state=1234):
 
         # Save all hyperparameters
@@ -55,11 +56,19 @@ class MLPRegression(object):
         self.seed = seed                                       # must be an integer
         self.randomstate = np.random.RandomState(self.seed)    # RandomState numpy 
         self.max_iter = max_iter
-        self.momentum = momentum
-        self.batch_size = batch_size
+        self.batch_size = batch_size        
         self.dropout_prob = dropout_prob
+        self.optimizer = optimizer
+        self.momentum = momentum
+
+        # Define other parameters
+        self.velocity = None
+
+        # Define lists for the train and validation curves
         self.loss_curve_ = None
         self.loss_curve_validation_ = None
+
+        # Define symbolic minibatches for the data and the target
         self.sym_Xbatch = T.matrix("sym_Xbatch")
         self.sym_Ybatch = T.matrix("sym_Ybatch")
  
@@ -83,7 +92,10 @@ class MLPRegression(object):
             self.cost = sym_mean_absolute_percentage_error
 
         # Define a method for updating the parameters of the network
-        self.sym_updates = self._updates_sgd(self.sym_cost_traintime, self.params)
+        self.sym_updates = self.define_updates(self.sym_cost_traintime,
+                                               self.params,
+                                               optimizer=self.optimizer,
+                                               velocity_coeff=self.momentum)
         
         # Define a supervised training procedurea
         self.tfunc_fit_mini_batch = theano.function(inputs=[self.sym_Xbatch, self.sym_Ybatch], 
@@ -113,7 +125,7 @@ class MLPRegression(object):
                                    "identity": identity }
         
         # Check the given activations are allowed
-        #for activation in activations:
+        # for activation in activations:
         #    assert(activation in implemented_activations, 'One of the activations was not allowed')
         
         activations_initialized = []
@@ -160,18 +172,80 @@ class MLPRegression(object):
         output = activation_minibatch * T.cast(mask, theano.config.floatX)
         return output # / (1 - p)
 
-    def _updates_sgd(self, cost, params, optimizer ='SGD'):
+    def define_updates(self, cost, params, optimizer ='SGD', velocity_coeff=0.8, rho=0.9, epsilon=1e-6):
         """
-        Method used to define a list of symbolic updates for theano
+        Method used to define a list of symbolic updates for theano.
+        
+        Some optimizers must keep track of other auxiliar variables that change over time.
+        For example, the velocity term in momentum needs to be changed every time
+        a minibatch is been observed and the parameters of the model are changed.
+        
+        Delta_parameter = learning_rate * velocity
         """
-        grads = theano.tensor.grad(cost=cost, wrt=params)
         updates = []
 
         if optimizer == 'SGD':
+            print('\tUsing SGD optimizer')
+            grads = theano.tensor.grad(cost=cost, wrt=params)
+
             for param,grad in zip(params, grads):
                 updates.append([param, param - grad * self.learning_rate ])
         
-        #elif optimizer == 'SGDmomentum'
+        elif optimizer == 'SGD_momentum':
+            """
+            Initialize (to zero) a velocity term for each parameter in the model.
+            
+            Update the velocity term using the previous velocity as follows: 
+                 velocity = velocity * velocity_coeff - learning_rate * grad
+
+            the velocity_coeff needs to verify  0 < velocity_coeff < 1
+
+            Delta_parameter = velocity
+            """
+            print('\tUsing SGD_momentum optimizer')
+            grads = theano.tensor.grad(cost=cost, wrt=params)
+
+            for param, grad in zip(params, grads):
+                velocity_param = theano.shared(param.get_value() * 0.)
+
+                velocity_param_next = velocity_coeff * velocity_param  - self.learning_rate * grad 
+                updates.append([velocity_param, velocity_param_next])
+                updates.append([param, param + velocity_param_next])
+                
+        elif optimizer =='RMSprop':
+
+            print('\tUsing SGD_momentum optimizer')
+            grads = theano.tensor.grad(cost=cost, wrt=params)
+
+            for param, grad in zip(params, grads):
+                grad_avg = theano.shared(param.get_value() * 0.)
+
+                grad_avg_new = rho * grad_avg + (1 - rho) * grad**2
+                grad_scaling = T.sqrt(grad_avg_new + epsilon)
+                grad = grad / grad_scaling
+
+                updates.append((grad_avg, grad_avg_new))
+                updates.append((param, param - self.learning_rate * grad))
+
+        elif optimizer == 'SGD_nesterov':
+            """
+            WARNING > UPDATES DO NOT SEEM THE SAME AS THE ONES IN THE COMMENT
+            """
+
+            print('\tUsing SGD_nesterov optimizer')
+            grads = theano.tensor.grad(cost=cost, wrt=params)
+
+            for param, grad in zip(params, grads):
+                # Not working because param_next is not from the computational graph of the cost
+                # velocity_nesterov_param = theano.shared(param.get_value() * 0.)
+                # param_next = param + velocity_coeff * velocity_nesterov_param
+                # grad = T.grad(cost, param_next)
+                # velocity_nesterov_param_next = velocity_coeff * velocity_nesterov_param - self.learning_rate * grad 
+                velocity = theano.shared(param.get_value() * 0.)
+                velocity_next = velocity_coeff * velocity - self.learning_rate * grad
+                param_next = velocity_coeff**2 * velocity - (1 + velocity_coeff) * self.learning_rate * grad
+                updates.append((velocity, velocity_next))
+                updates.append((param, param + param_next))
 
         return updates
      
@@ -238,7 +312,7 @@ class MLPRegression(object):
         n_batches = len([permutation[x: x + self.batch_size] for x in range(0, n_samples, self.batch_size)])
         if n_batches == 0:
             print("\nWarning: batch_size bigger than number of examples", y.shape)
-
+        
         if y.ndim == 1:
             print("\nWarning: y has been reshaped as column vector because it had shape:", y.shape)
             y = y.reshape((-1, 1))
