@@ -172,7 +172,7 @@ class MLPRegression(object):
         output = activation_minibatch * T.cast(mask, theano.config.floatX)
         return output # / (1 - p)
 
-    def define_updates(self, cost, params, optimizer ='SGD', velocity_coeff=0.8, rho=0.9, epsilon=1e-6):
+    def define_updates(self, cost, params, optimizer ='SGD_momentum', velocity_coeff=0.8, rho=0.9, epsilon=1e-6):
         """
         Method used to define a list of symbolic updates for theano.
         
@@ -214,7 +214,7 @@ class MLPRegression(object):
                 
         elif optimizer =='RMSprop':
 
-            print('\tUsing SGD_momentum optimizer')
+            print('\tUsing RMSprop optimizer')
             grads = theano.tensor.grad(cost=cost, wrt=params)
 
             for param, grad in zip(params, grads):
@@ -292,7 +292,7 @@ class MLPRegression(object):
         cost_minibatch = self.tfunc_fit_mini_batch(X, y)
         return cost_minibatch
 
-    def fit(self, X, y, X_val=None, y_val=None, n_epochs = 100):
+    def fit(self, X, y, X_val=None, y_val=None, X_test=None, y_test=None, n_epochs = 100, early_stopping=False, evaluate_every=10):
         """
         Fit the MLP.
         For each epoch and for each minibatch change the weights in the model.
@@ -308,6 +308,7 @@ class MLPRegression(object):
         if not self.loss_curve_:
             self.loss_curve_ = []
             self.loss_curve_validation_ = []
+            self.loss_curve_test_ = []
 
         n_batches = len([permutation[x: x + self.batch_size] for x in range(0, n_samples, self.batch_size)])
         if n_batches == 0:
@@ -325,9 +326,18 @@ class MLPRegression(object):
                 # WARNING: We can do this without slicing arrays we can do it in the theano way passing only indicies
                 epoch_loss_aprox += self.partial_fit(X[batch_indicies], y[batch_indicies])
             
-            if X_val is not None:
+            if X_val is not None and epoch % evaluate_every==0:
                 yhat_validation =  self.output_given_input_evaluation(X_val, self.W, self.b)
-                self.loss_curve_validation_.append(self.cost(yhat_validation, y_val).eval())
+                self.loss_curve_validation_.append(float(self.cost(yhat_validation, y_val).eval()))
+                
+                if early_stopping:
+                    if self.loss_curve_validation_[-1] > self.loss_curve_validation_[-2]:
+                        break
+
+            if X_test is not None and epoch % evaluate_every==0:
+                yhat_test =  self.output_given_input_evaluation(X_test, self.W, self.b)
+                self.loss_curve_test_.append(float(self.cost(yhat_test, y_test).eval()))
+            
 
             np.random.RandomState(self.seed + epoch)
             permutation = np.random.permutation(n_samples)
