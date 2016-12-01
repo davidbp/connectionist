@@ -5,6 +5,7 @@ import time
 from theano.tensor.shared_randomstreams import RandomStreams
 from theano import tensor as T
 from sklearn.preprocessing import OneHotEncoder
+import sys
 
 srng = RandomStreams(seed=100)
 
@@ -107,9 +108,6 @@ class MLPRegression(object):
         # Define how to find the output of the model given the parameters of the model during training
         self.output_for_sym_Xbatch_testime = self.output_given_input_evaluation(self.sym_Xbatch, self.W, self.b)
 
-        # Define a cost function, at test time
-        self.sym_cost_testtime = T.mean((self.output_for_sym_Xbatch_testime - self.sym_Ybatch)**2)
-        
         # Define a function to the the predicted class for a set of inputs
         self.tfunc_predict = theano.function(inputs=[self.sym_Xbatch],
                                              outputs=self.output_for_sym_Xbatch_testime, 
@@ -185,7 +183,7 @@ class MLPRegression(object):
         updates = []
 
         if optimizer == 'SGD':
-            print('\tUsing SGD optimizer')
+            print('\nUsing SGD optimizer\n')
             grads = theano.tensor.grad(cost=cost, wrt=params)
 
             for param,grad in zip(params, grads):
@@ -202,7 +200,7 @@ class MLPRegression(object):
 
             Delta_parameter = velocity
             """
-            print('\tUsing SGD_momentum optimizer')
+            print('\nUsing SGD_momentum optimizer\n')
             grads = theano.tensor.grad(cost=cost, wrt=params)
 
             for param, grad in zip(params, grads):
@@ -214,7 +212,7 @@ class MLPRegression(object):
                 
         elif optimizer =='RMSprop':
 
-            print('\tUsing RMSprop optimizer')
+            print('\nUsing RMSprop optimizer\n')
             grads = theano.tensor.grad(cost=cost, wrt=params)
 
             for param, grad in zip(params, grads):
@@ -232,7 +230,7 @@ class MLPRegression(object):
             WARNING > UPDATES DO NOT SEEM THE SAME AS THE ONES IN THE COMMENT
             """
 
-            print('\tUsing SGD_nesterov optimizer')
+            print('\nUsing SGD_nesterov optimizer (Warning: Look at the code)\n')
             grads = theano.tensor.grad(cost=cost, wrt=params)
 
             for param, grad in zip(params, grads):
@@ -240,7 +238,7 @@ class MLPRegression(object):
                 # velocity_nesterov_param = theano.shared(param.get_value() * 0.)
                 # param_next = param + velocity_coeff * velocity_nesterov_param
                 # grad = T.grad(cost, param_next)
-                # velocity_nesterov_param_next = velocity_coeff * velocity_nesterov_param - self.learning_rate * grad 
+                # velocity_nestero_vparam_next = velocity_coeff * velocity_nesterov_param - self.learning_rate * grad 
                 velocity = theano.shared(param.get_value() * 0.)
                 velocity_next = velocity_coeff * velocity - self.learning_rate * grad
                 param_next = velocity_coeff**2 * velocity - (1 + velocity_coeff) * self.learning_rate * grad
@@ -279,6 +277,115 @@ class MLPRegression(object):
                 X = activation(T.dot(X, W) + b)
 
         return X
+
+
+    def fit_(self, X, y, X_val=None, y_val=None, X_test=None, y_test=None, n_epochs = 100, early_stopping=False, evaluate_every=10):
+        """
+        Fit the MLP.
+        For each epoch and for each minibatch change the weights in the model.
+        
+        THIS SHOULD BE FASTER THAN fit_ but its not....
+        """
+        begin_train_time = time.time()
+        n_samples, n_features = X.shape
+        np.random.RandomState(self.seed)
+        permutation = np.random.permutation(n_samples)
+
+        if not self.loss_curve_:
+            self.loss_curve_ = []
+            self.loss_curve_validation_ = []
+            self.loss_curve_test_ = []
+
+        n_batches = len([permutation[x: x + self.batch_size] for x in range(0, n_samples, self.batch_size)])
+        if n_batches == 0:
+            print("\nWarning: batch_size bigger than number of examples", y.shape)
+        
+        if y.ndim == 1:
+            print("\nWarning: y has been reshaped as column vector because it had shape:", y.shape)
+            y = y.reshape((-1, 1))
+        
+        self.n_outputs_ = y.shape[1]
+
+
+        #### Define the symbolic parts that theano needs ####
+        indicies = T.vector("indicies", dtype="int64")
+
+        X = theano.shared(X)
+        y = theano.shared(y)
+
+        tfunc_fit_mini_batch_with_indicies = theano.function(
+                    inputs=[indicies],
+                    outputs=self.sym_cost_traintime,
+                    updates=self.sym_updates,
+                    givens={
+                        self.sym_Xbatch: X[indicies],
+                        self.sym_Ybatch: y[indicies] })
+
+        if X_test is not None:
+            n_samples_test = X_test.shape[0]
+            test_indicies = list(range(n_samples_test))
+            X_test = theano.shared(X_test)
+            y_test = theano.shared(y_test)
+            tfunc_test_model = theano.function(
+                    inputs=[indicies],
+                    outputs=self.sym_cost_traintime,
+                    givens={
+                         self.sym_Xbatch: X_test[indicies],
+                         self.sym_Ybatch: y_test[indicies] })
+
+        if X_val is not None:
+            n_samples_val = X_val.shape[0]
+            X_val = theano.shared(X_val)
+            y_val = theano.shared(y_val)
+            tfunc_validate_model = theano.function(
+                    inputs=[indicies],
+                    outputs=self.sym_cost_traintime,
+                    givens={
+                         self.sym_Xbatch: X_val[indicies],
+                         self.sym_Ybatch: y_val[indicies] })
+
+
+        time_0 = time.time()
+        for epoch in range(1, n_epochs+1):
+            epoch_loss_aprox = 0
+            #a = time.time()
+
+            for batch_indicies in [permutation[x: x + self.batch_size] for x in range(0, n_samples, self.batch_size)]:
+                epoch_loss_aprox +=  tfunc_fit_mini_batch_with_indicies(batch_indicies)
+            epoch_loss_aprox = epoch_loss_aprox / n_batches
+            evaluation_for_display = '\r' + str(epoch) + '/'+ str(n_epochs) + ' train loss: ' + str(epoch_loss_aprox)[0:8]
+            #print(time.time() - a)
+
+            #### Evaluate loss and print ####
+            if X_val is not None and epoch % evaluate_every == 0:
+                validation_loss = tfunc_test_model()
+                self.loss_curve_validation_.append(validation_loss)
+                evaluation_for_display = evaluation_for_display + ' valid loss: ' + str(validation_loss)[0:8]
+
+                if early_stopping:
+                    if self.loss_curve_validation_[-1] > self.loss_curve_validation_[-2]:
+                        break
+
+            if X_test is not None and epoch % evaluate_every == 0:
+                test_loss = tfunc_test_model(test_indicies)
+                self.loss_curve_test_.append(test_loss)
+                evaluation_for_display = evaluation_for_display + ' test loss: ' + str(test_loss)[0:8]
+
+            np.random.RandomState(self.seed + epoch)
+            permutation = np.random.permutation(n_samples)
+
+            # Print every evaluate_every epochs
+            if epoch % evaluate_every == 0:
+                time_1 = time.time()
+                evaluation_for_display = evaluation_for_display + ' time (sec): ' + str(time_1 - time_0)[0:6]
+                time_0 = time.time()
+                sys.stdout.write(evaluation_for_display) 
+                self.loss_curve_.append(epoch_loss_aprox)
+
+
+        self.train_time = time.time() - begin_train_time
+        print("\n")
+
      
     def partial_fit(self, X, y):
         """
@@ -300,7 +407,7 @@ class MLPRegression(object):
         The function that changes the weights is the partial_fit function which
         calls self.tfunc_fit_mini_batch
         """
-
+        begin_train_time = time.time()
         n_samples, n_features = X.shape
         np.random.RandomState(self.seed)
         permutation = np.random.permutation(n_samples)
@@ -320,29 +427,47 @@ class MLPRegression(object):
         
         self.n_outputs_ = y.shape[1]
         
-        for epoch in range(n_epochs):
+        time_0 = time.time()
+        for epoch in range(1, n_epochs+1):
             epoch_loss_aprox = 0
+
             for batch_indicies in [permutation[x: x + self.batch_size] for x in range(0, n_samples, self.batch_size)]:
-                # WARNING: We can do this without slicing arrays we can do it in the theano way passing only indicies
                 epoch_loss_aprox += self.partial_fit(X[batch_indicies], y[batch_indicies])
             
-            if X_val is not None and epoch % evaluate_every==0:
+            epoch_loss_aprox = epoch_loss_aprox / n_batches
+            evaluation_for_display = '\r' + str(epoch) + '/'+ str(n_epochs) + ' train loss: ' + str(epoch_loss_aprox)[0:8]
+
+            #### Evaluate loss and print ####
+            if X_val is not None and epoch % evaluate_every == 0:
                 yhat_validation =  self.output_given_input_evaluation(X_val, self.W, self.b)
+                validation_loss = float(self.cost(yhat_validation, y_val).eval())
                 self.loss_curve_validation_.append(float(self.cost(yhat_validation, y_val).eval()))
-                
+                evaluation_for_display = evaluation_for_display + ' valid loss: ' + str(validation_loss)[0:8]
+
                 if early_stopping:
                     if self.loss_curve_validation_[-1] > self.loss_curve_validation_[-2]:
                         break
 
-            if X_test is not None and epoch % evaluate_every==0:
+            if X_test is not None and epoch % evaluate_every == 0:
                 yhat_test =  self.output_given_input_evaluation(X_test, self.W, self.b)
-                self.loss_curve_test_.append(float(self.cost(yhat_test, y_test).eval()))
-            
+                test_loss = float(self.cost(yhat_test, y_test).eval())
+                self.loss_curve_test_.append(test_loss)
+                evaluation_for_display = evaluation_for_display + ' test loss: ' + str(test_loss)[0:8]
 
             np.random.RandomState(self.seed + epoch)
             permutation = np.random.permutation(n_samples)
-            self.loss_curve_.append(epoch_loss_aprox/n_batches)
 
+            # Print every evaluate_every epochs
+            if epoch % evaluate_every == 0:
+                time_1 = time.time()
+                evaluation_for_display = evaluation_for_display + ' time (sec): ' + str(time_1 - time_0)[0:6]
+                time_0 = time.time()
+                sys.stdout.write(evaluation_for_display) 
+                self.loss_curve_.append(epoch_loss_aprox)
+
+
+        self.train_time = time.time() - begin_train_time
+        print("\n")
 
     def predict(self, X):
         """
