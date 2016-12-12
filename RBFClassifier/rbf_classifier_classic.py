@@ -57,6 +57,9 @@ class RBFClassifier(BaseEstimator, ClassifierMixin):
                 - the first layer weights are set via clustering
                 - output layer weights are learned using the "normal equation method"
         """
+        if targets.ndim == 1:
+            targets = targets.reshape(-1,1)
+
         self.verify_fit_inputs(inputs, targets, seed, method)
         n_samples, n_features = inputs.shape
 
