@@ -265,8 +265,8 @@ class RBM:
         elements = np.array(range(X.shape[0]))
 
         for epoch in range(0, epochs):
-            sys.stdout.write('\r')
-            sys.stdout.write("epoch %d/ %d" %  (epoch+1,epochs))
+            #sys.stdout.write('\r')
+            #sys.stdout.write("epoch %d/ %d" %  (epoch+1,epochs))
 
             t0 = time.time()
 
@@ -284,6 +284,12 @@ class RBM:
             if self.monitor_time:
                 time_ep = time.time() - t0
                 time_total = time.time() - t00
-                sys.stdout.write("\ttime per epoch: " + "{0:.2f}".format(time_ep) + "\t total time: " + "{0:.2f}".format(time_total))
-                sys.stdout.flush()
+                print("\tepoch:", epoch ,"\ttime per epoch: " + "{0:.2f}".format(time_ep) + "\ttotal time: " + "{0:.2f}".format(time_total), end="\r")
+                #print("\tEpoch: {} \ttime per epoch: {} \ttotal time: {}".format(epoch, time_ep, time_total), end="\r")
+                #sys.stdout.flush()
+
+        print("\tLast epoch:", epoch ,"\ttime per epoch: " + "{0:.2f}".format(time_ep) + "\ttotal time: " + "{0:.2f}".format(time_total), end="\r")
+        print("\n\tTraining finished\n\n")
+
+
 

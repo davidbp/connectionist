@@ -1,6 +1,5 @@
 from timeit import default_timer as timer
 import numpy as np
-from numpy import dot as npdot
 import time
 import matplotlib.pyplot as plt
 import numexpr as ne
@@ -95,11 +94,11 @@ class RBM:
             xneg = x
         
             for k in range(0, k):
-                hneg = sig( npdot(xneg, self.W) + self.c) > np.random.random(self.hidden_dim).astype(np.float32)
-                xneg = sig( npdot(hneg, self.W.T) + self.b) > np.random.random(self.visible_dim).astype(np.float32)
+                hneg = sig( np.dot(xneg, self.W) + self.c) > np.random.random(self.hidden_dim).astype(np.float32)
+                xneg = sig( np.dot(hneg, self.W.T) + self.b) > np.random.random(self.visible_dim).astype(np.float32)
         
-            ehp = sig( npdot(x, self.W) + self.c )
-            ehn = sig( npdot(xneg, self.W) + self.c)
+            ehp = sig( np.dot(x, self.W) + self.c )
+            ehn = sig( np.dot(xneg, self.W) + self.c)
 
             Delta_W += lr * (np.outer(x, ehp) - np.outer(xneg, ehn))
             Delta_b += lr * (x - xneg)
@@ -116,20 +115,13 @@ class RBM:
         Xneg  = Xbatch
 
         for k in range(0,K):
-            Hneg = sig( npdot(Xneg , self.W) + self.c) > np.random.random((batch_size, self.hidden_dim)).astype(np.float32)
-            Xneg = sig( npdot(Hneg, self.W.T) + self.b) > np.random.random((batch_size, self.visible_dim)).astype(np.float32)
+            Hneg = sig( np.dot(Xneg , self.W) + self.c) > np.random.random((batch_size, self.hidden_dim)).astype(np.float32)
+            Xneg = sig( np.dot(Hneg, self.W.T) + self.b) > np.random.random((batch_size, self.visible_dim)).astype(np.float32)
 
-        Ehp = sig( npdot(Xbatch, self.W) + self.c)
-        Ehn = sig( npdot(Xneg, self.W) + self.c)
+        Ehp = sig( np.dot(Xbatch, self.W) + self.c)
+        Ehn = sig( np.dot(Xneg, self.W) + self.c) 
 
-        print "Ehp", Ehp.shape
-        print "Ehn", Ehn.shape
-        print "Hneg",Hneg.shape
-        print "Xneg",Xneg.shape
-        import pdb;pdb.set_trace()
-        
-
-        Delta_W = lr * ( npdot(Xbatch.T, Ehp) -  npdot(Xneg.T, Ehn))
+        Delta_W = lr * ( np.dot(Xbatch.T, Ehp) -  np.dot(Xneg.T, Ehn))
         Delta_b =  np.sum(lr * (Xbatch - Xneg), axis=0)
         Delta_c = np.sum(lr * (Ehp - Ehn), axis=0)
 
@@ -147,14 +139,14 @@ class RBM:
         Xneg  = Xbatch
 
         for k in range(0,K):
-            Hneg = sig( npdot(Xneg , self.W) + self.c) > np.random.random((batch_size, self.hidden_dim)).astype(np.float32)
-            Xneg = sig( npdot(Hneg, self.W.T) + self.b) > np.random.random((batch_size, self.visible_dim)).astype(np.float32)
+            Hneg = sig( np.dot(Xneg , self.W) + self.c) > np.random.random((batch_size, self.hidden_dim)).astype(np.float32)
+            Xneg = sig( np.dot(Hneg, self.W.T) + self.b) > np.random.random((batch_size, self.visible_dim)).astype(np.float32)
 
-        Ehp = sig( npdot(Xbatch, self.W) + self.c)
-        Ehn = sig( npdot(Xneg, self.W) + self.c)
+        Ehp = sig( np.dot(Xbatch, self.W) + self.c)
+        Ehn = sig( np.dot(Xneg, self.W) + self.c)
 
 
-        Delta_W = lr * (npdot(Xbatch.T, Ehp) -  npdot(Xneg.T, Ehn))
+        Delta_W = lr * (np.dot(Xbatch.T, Ehp) -  np.dot(Xneg.T, Ehn))
         Delta_b = np.sum(lr * (Xbatch - Xneg), axis=0)
         Delta_c = np.sum(lr * (Ehp - Ehn), axis=0)
         #error_epoch += np.sum(np.sum((Xbatch-Xneg)**2), axis = 0)
@@ -170,13 +162,13 @@ class RBM:
         Xneg  = Xbatch
 
         for k in range(0,K):
-            Hneg = sig( npdot(Xneg, self.W) + self.c, numexpr=True) > np.random.random((batch_size, self.hidden_dim)).astype(np.float32)
-            Xneg = sig( npdot(Hneg, self.W.T) + self.b, numexpr=True) > np.random.random((batch_size, self.visible_dim)).astype(np.float32)
+            Hneg = sig( np.dot(Xneg, self.W) + self.c, numexpr=True) > np.random.random((batch_size, self.hidden_dim)).astype(np.float32)
+            Xneg = sig( np.dot(Hneg, self.W.T) + self.b, numexpr=True) > np.random.random((batch_size, self.visible_dim)).astype(np.float32)
 
-        Ehp = sig( npdot(Xbatch, self.W) + self.c, numexpr=True)
-        Ehn = sig( npdot(Xneg, self.W) + self.c, numexpr=True)
+        Ehp = sig( np.dot(Xbatch, self.W) + self.c, numexpr=True)
+        Ehn = sig( np.dot(Xneg, self.W) + self.c, numexpr=True)
 
-        Delta_W = lr * ( npdot(Xbatch.T, Ehp) -  npdot(Xneg.T, Ehn))
+        Delta_W = lr * ( np.dot(Xbatch.T, Ehp) -  np.dot(Xneg.T, Ehn))
         Delta_b = np.sum(lr * (Xbatch - Xneg), axis=0)
         Delta_c = np.sum(lr * (Ehp - Ehn), axis=0)
         #error_epoch += np.sum(np.sum((Xbatch-Xneg)**2), axis = 0)
@@ -199,13 +191,13 @@ class RBM:
 
         for x in Xbatch:
             for k in range(0, K):
-                hneg = sig( npdot(xneg, self.W) + self.c) > np.random.random(self.hidden_dim).astype(np.float32)
-                xneg = sig( npdot(hneg, self.W.T) + self.b) > np.random.random(self.visible_dim).astype(np.float32)
+                hneg = sig( np.dot(xneg, self.W) + self.c) > np.random.random(self.hidden_dim).astype(np.float32)
+                xneg = sig( np.dot(hneg, self.W.T) + self.b) > np.random.random(self.visible_dim).astype(np.float32)
             
             self.previous_xneg = xneg
 
-            ehp = sig( npdot(x, self.W) + self.c )
-            ehn = sig( npdot(xneg, self.W) + self.c)
+            ehp = sig( np.dot(x, self.W) + self.c )
+            ehn = sig( np.dot(xneg, self.W) + self.c)
 
             Delta_W += lr * (np.outer(x, ehp) - np.outer(xneg, ehn))
             Delta_b += lr * (x - xneg)
@@ -245,8 +237,8 @@ class RBM:
         elements = np.array(range(X.shape[0]))
 
         for epoch in range(0, epochs):
-            sys.stdout.write('\r')
-            sys.stdout.write("epoch %d/ %d" %  (epoch,epochs))
+            #sys.stdout.write('\r')
+            #sys.stdout.write("epoch %d/ %d" %  (epoch,epochs))
 
             t0 = time.time()
 
@@ -264,6 +256,6 @@ class RBM:
             if self.monitor_time:
                 time_ep = time.time() - t0
                 time_total = time.time() - t00
-                sys.stdout.write("\ttime per epoch: " + "{0:.2f}".format(time_ep) + "\t total time: " + "{0:.2f}".format(time_total))
+                sys.stdout.write("\tepoch:", epoch ,"\ttime per epoch: " + "{0:.2f}".format(time_ep) + "\ttotal time: " + "{0:.2f}".format(time_total), end="")
                 sys.stdout.flush()
 
