@@ -34,23 +34,31 @@ class CRBM:
     (1): http://www.cs.toronto.edu/~fritz/absps/uai_crbms.pdf
 
     """
-      def __init__(self, visible_dim, hidden_dim, seed=42, mu=0, sigma=0.3, monitor_time=True):
-        np.random.seed(seed)
+    def __init__(self, n_vis, n_hid, n_cond, seed=42, sigma=0.3, monitor_time=True):
+
         self.previous_xneg = None
-        W = np.random.normal(mu, sigma, [visible_dim, hidden_dim])
+        np.random.seed(seed)
+
+        W = np.random.normal(0, sigma, [n_vis, n_hid])   # vis to hid
+        A = np.random.normal(0, sigma, [n_vis, n_cond])  # cond to vis
+        B = np.random.normal(0, sigma, [n_vis, n_cond])  # cond to hid
+
+        v_bias = np.zeros([n_vis, 1]) 
+        h_bias = np.zeros([n_hid, 1])
+
+        dy_v_bias = np.zeros([n_vis, 1])
+        dy_h_bias = np.zeros([n_hid, 1])
+
         self.W = np.array(W, dtype='float32')
+        self.A = np.array(A, dtype='float32')
+        self.B = np.array(B, dtype='float32')
 
-        np.random.seed(seed)
-        b = np.random.normal(mu, sigma, [visible_dim ])
-        self.b = np.array(b, dtype='float32')
-
-        np.random.seed(seed)
-        c = np.random.normal(mu, sigma, [hidden_dim])
-        self.c = np.array(c, dtype='float32')
-
-        self.visible_dim = visible_dim
-        self.hidden_dim = hidden_dim
+        self.n_vis = n_vis
+        self.n_hid = n_hid
 
         self.num_epochs_trained = 0
         self.lr = 0
         self.monitor_time = monitor_time
+
+
+
