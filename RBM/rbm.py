@@ -1,3 +1,5 @@
+# Author: David Buchaca Prats
+
 from timeit import default_timer as timer
 import numpy as np
 from numpy import outer as np_outer
@@ -6,7 +8,7 @@ import matplotlib.pyplot as plt
 import numexpr as ne
 from numexpr import evaluate 
 import sys
-# Author: David Buchaca Prats
+
 import numba
 from numba import jit, autojit
 

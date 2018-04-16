@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 import numexpr as ne
 from numexpr import evaluate 
 import sys
-
+import os
 
 class CRBM:
     
@@ -110,8 +110,8 @@ def split_vis(crbm: CRBM, vis: np.ndarray):
     
     assert  crbm.n_vis == x.shape[0] and crbm.n_vis == cond.shape[0], \
             "crbm.n_vis = {}, is different from x.shape[0] = {} or cond.shape[0] = {}".format(crbm.n_vis,
-                                                                                                  x.shape[0],
-                                                                                                  cond.shape[0])
+                                                                                              x.shape[0],
+                                                                                              cond.shape[0])
     return x, cond
 
 def dynamic_biases_up(crbm: CRBM, cond: np.ndarray):
@@ -220,3 +220,82 @@ def get_slice_at_position_k(X, k, n_his):
     assert k > n_his, "Position k = {} is lower than n_his = {}".format(k, n_his)
     assert k <= X.shape[1], "Position k = {} is bigger than number of timesteps of X.shape[1] = {}".format(k, X.shape[0])
     return X[:, (k-(n_his+1)):k]
+
+def build_slices_from_list_of_arrays(list_of_arrays, n_his, n_feat):
+    """
+    This function creates a list of slices of shape (n_his + 1, n_feat)
+    """
+    assert list_of_arrays[0].shape[1] == n_feat, "list_of_arrays[0].shape[1]={} but n_feat={}".format( list_of_arrays[0].shape[1], n_feat)
+    
+    X_slices = []
+    
+    for m, arr in enumerate(list_of_arrays):
+        if arr.shape[0] < n_his + 1:
+            print("Sequence {} has length {}".format(m, arr.shape[0])) 
+        else:
+            for k in range(n_his+1, arr.shape[0] + 1):
+                X_slice = arr[(k-n_his-1):k, :]
+                if X_slice.shape[0] != n_his+1:
+                    print("error!")
+                X_slices.append(X_slice)
+                
+    return X_slices
+
+def CDK_sa(crbm, vis,cond, K=1):
+    
+    v_pos_mean = vis
+    h_pos_sample, h_pos_mean    = sample_hiddens(crbm,  v_pos_mean, cond)
+    v_neg_mean                  = sample_visibles(crbm, h_pos_sample, cond)
+    h_neg_sample, h_neg_mean    = sample_hiddens(crbm,  v_neg_mean, cond)
+    
+        
+    for i in range(K-1):
+        v_neg_mean           = sample_visibles(crbm, h_neg_sample, cond)
+        h_neg, h_neg_mean    = sample_hiddens(crbm,  v_neg_mean, cond)
+
+    return v_pos_mean, h_pos_mean , v_neg_mean, h_neg_mean
+
+def generate(crbm, vis, cond_as_vec, n_gibbs=10):
+    """ 
+    Given initialization(s) of visibles and matching history, generate a sample in the future.
+    
+        vis:  n_vis * 1 array
+            
+        cond_as_vec: n_hist * n_vis array
+            
+        n_gibbs : int
+            number of alternating Gibbs steps per iteration
+    """
+    
+    assert cond_as_vec.shape[1] ==1, "cond_as_vec has to be a column vector"
+    
+    n_seq = vis.shape[0]
+    #import pdb; pdb.set_trace()
+    #v_pos, h_pos, v_neg, h_neg = CDK(crbm, vis, cond_as_vec, n_gibbs)
+    v_pos, h_pos, v_neg, h_neg = CDK_sa(crbm, vis, cond_as_vec, n_gibbs)
+    
+    return v_neg
+    
+
+def generate_n_samples(crbm, vis, cond_as_vec, n_samples, n_gibbs=100):
+    """ 
+    Given initialization(s) of visibles and matching history, generate a n_samples in the future.
+    """
+    
+    assert cond_as_vec.shape[1] ==1, "cond_as_vec has to be a column vector"
+    
+    samples = []
+    for i in range(n_samples):
+        v_new = generate(crbm, vis, cond_as_vec, n_gibbs)
+        
+        # This should not be here
+        #v_new = v_new/np.linalg.norm(v_new)      
+        #print("i:", i, "\tv_new:", v_new.T)
+        #print("cond_as_vec:", cond_as_vec[-8:].T, "\n\n")
+        #v_new[v_new<0] = 0
+        
+        update_history_as_vec(cond_as_vec, v_new)
+        
+        samples.append(v_new)
+
+    return samples
