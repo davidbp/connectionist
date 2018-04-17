@@ -1,0 +1,1 @@
+{"n_vis": 4, "n_hid": 256, "n_his": 40, "seed": 123, "sigma": 0.3, "monitor_time": true, "scale_factor": 0, "dtype": "Float32"}
