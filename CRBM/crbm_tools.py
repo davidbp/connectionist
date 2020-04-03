@@ -12,6 +12,7 @@ import os
 import random
 import inspect
 import json
+import pickle
 
 class CRBM:
     
@@ -374,6 +375,39 @@ class CRBM:
         return samples
 
 
+    def predict(self, seq):
+
+        n_seq = len(seq)
+
+        if n_seq < self.n_his + 1:
+            if self.verbose:
+                print(f"Warning, input sequence has len {n_seq} but history has len {self.n_his}")
+
+        activations = np.zeros((n_seq, self.n_hid))
+      
+        for k in range(self.n_his+1, n_seq):
+            X_slice = seq[(k-self.n_his-1):k, :]
+            history_vec = self.history_mat_to_vec(X_slice[0:-1,:])
+            vis = X_slice[[-1],:].T
+            h_preact, h_activations = self.sample_hiddens(vis, history_vec)
+            activations[k,:] = h_activations.T
+
+        return activations
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -502,7 +536,7 @@ def get_slice_at_position_k(X, k, n_his):
     assert k <= X.shape[1], "Position k = {} is bigger than number of timesteps of X.shape[1] = {}".format(k, X.shape[0])
     return X[:, (k-(n_his+1)):k]
 
-def build_slices_from_list_of_arrays(list_of_arrays, n_his, n_feat):
+def build_slices_from_list_of_arrays(list_of_arrays, n_his, n_feat, verbose=0):
     """
     This function creates a list of slices of shape (n_his + 1, n_feat)
     """
@@ -512,12 +546,14 @@ def build_slices_from_list_of_arrays(list_of_arrays, n_his, n_feat):
     
     for m, arr in enumerate(list_of_arrays):
         if arr.shape[0] < n_his + 1:
-            print("Sequence {} has length {}".format(m, arr.shape[0])) 
+            if verbose>0:
+                print("Sequence {} has length {}".format(m, arr.shape[0])) 
         else:
             for k in range(n_his+1, arr.shape[0] + 1):
                 X_slice = arr[(k-n_his-1):k, :]
                 if X_slice.shape[0] != n_his+1:
-                    print("error!")
+                    if verbose>0:
+                        print("error!")
                 X_slices.append(X_slice)
                 
     return X_slices

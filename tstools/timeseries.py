@@ -315,3 +315,105 @@ def hstack_with_padding(timeseries_a: np.ndarray, timeseries_b: np.ndarray):
         timeseries_b = np.vstack((timeseries_b, np.zeros((n_difference, n_features_b))))
 
     return np.hstack((timeseries_a, timeseries_b))
+
+
+
+def plot_timeseries_with_phases(timeseries:            pd.DataFrame or np.ndarray,
+                                phases:                pd.DataFrame or np.ndarray,
+                                num_to_color:          dict=None,
+                                y_phase_values:        list=[],        # y axis values at the phase descriptor
+                                column_names:          list=[],
+                                fig_size:              tuple=(20,10),
+                                color:                 str="red", 
+                                font_size:             int=20,         # size of title
+                                label_size:            int=15,         # size of the x and y numbers
+                                dist_between_subplots: float=3.0,      # distance between each plot
+                                y_lim:                 tuple=(0,1),  
+                                y_ticks_delta:         float=0.25,
+                                file_to_save:          str="",         # save if this is not an empy string
+                               ):
+    '''
+    Function for plotting a multidimensional timeseries passed as dataframe or numpy array.
+
+    The function makes a plot for each column of the dataframe or the numpy array.
+
+    - If `timeseries` is a `np.ndarray` and `column_names` is passed then title of timeseries[:,j] is column_names[j]. 
+
+    - If `timeseries` is a dataframe it will use as title for each column it's own colname. If `column_names` is provided
+      it will use by default what is in `column_names` instead of the original column name in the dataframe.
+
+    '''
+
+    assert isinstance(timeseries, pd.DataFrame) or isinstance(timeseries, np.ndarray),\
+           "\ntimeseries is not pd.DataFrame or np.ndarray.\n\ttimeseries is {}".format(type(timeseries))
+
+    assert isinstance(phases, pd.DataFrame) or isinstance(phases, np.ndarray),\
+           "\nphases is not pd.DataFrame or np.ndarray.\n\tphases is is {}".format(type(timeseries))
+
+
+    if isinstance(timeseries, np.ndarray):
+        if timeseries.ndim == 1:
+            timeseries = np.array([timeseries]).T
+
+        if column_names:
+            assert len(column_names) == timeseries.shape[1], \
+                "\ntimeseries has {} columns, column_names has {} columns. They should match.".format(len(column_names),
+                                                                                                      timeseries.shape[1])
+
+            n_plots = len(column_names)
+        else:
+            n_plots = timeseries.shape[1]
+            column_names = ["Column " + str(j) for j in range(n_plots)]
+
+    
+    if isinstance(timeseries, pd.DataFrame):
+        column_names = timeseries.columns if not column_names else column_names
+        n_plots = len(column_names)
+
+    if num_to_color ==None:
+        #num_to_color = {0:'black', 1:'red', 2:'green', 3:'blue', 4:'cyan'}
+        unique_colors = np.unique(phases)
+        num_to_color = {c: c/np.max(unique_colors) for c in unique_colors}
+        
+
+    # the n_plots + 1 is because we add the first row showing the phases
+    fig, axs = plt.subplots(nrows=n_plots + 1, ncols=1, figsize=fig_size)
+    x_positions = list(range(len(phases)))
+
+    if type(axs) is not np.ndarray:
+        axs = np.array([axs])
+
+    if isinstance(timeseries, pd.DataFrame):
+        axs[0].bar(x_positions, phases+1, color=[num_to_color[num] for num in phases],width=1)
+        axs[0].set_title("phases", color=color, fontsize=font_size)
+        axs[0].tick_params(labelsize=label_size) # change number sizes in x and y axis
+        axs[0].set_yticks(y_phase_values)
+
+        for j,axis in enumerate(axs[1:]):
+            #axs.set_ylabel("unit column j")
+            axis.plot(timeseries[column_names[j]])
+            axis.set_title(column_names[j] , color=color, fontsize=font_size)
+            axis.tick_params(labelsize=label_size) # change number sizes in x and y axis
+            axis.set_yticks(np.arange(y_lim[0], y_lim[1], y_ticks_delta))
+
+    if isinstance(timeseries, np.ndarray):
+        axs[0].bar(x_positions, phases+1, color=[num_to_color[num] for num in phases],width=1)
+        axs[0].set_title("phases" , color=color, fontsize=font_size)
+        axs[0].tick_params(labelsize=label_size) # change number sizes in x and y axis
+        axs[0].set_yticks(y_phase_values)
+
+        for j,axis in enumerate(axs[1:]):
+            #axs.set_ylabel("unit column j")
+            axis.plot(timeseries[:, j])
+            axis.set_title(column_names[j], color=color, fontsize=font_size)
+            axis.tick_params(labelsize=label_size) # change number sizes in x and y axis
+            axis.set_yticks(np.arange(y_lim[0], y_lim[1], y_ticks_delta))
+            axis.set_ylim(y_lim)
+
+    fig.tight_layout(pad=2., w_pad=0., h_pad=dist_between_subplots) 
+
+    if len(file_to_save)>0:
+        plt.savefig(file_to_save)
+
+
+        
