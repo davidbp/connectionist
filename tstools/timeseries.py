@@ -331,6 +331,7 @@ def plot_timeseries_with_phases(timeseries:            pd.DataFrame or np.ndarra
                                 y_lim:                 tuple=(0,1),  
                                 y_ticks_delta:         float=0.25,
                                 file_to_save:          str="",         # save if this is not an empy string
+                               	merge_phases:          bool=False
                                ):
     '''
     Function for plotting a multidimensional timeseries passed as dataframe or numpy array.
@@ -391,6 +392,11 @@ def plot_timeseries_with_phases(timeseries:            pd.DataFrame or np.ndarra
 
         for j,axis in enumerate(axs[1:]):
             #axs.set_ylabel("unit column j")
+            if merge_phases:
+                phases_placeholder=np.ones(len(phases))*10
+                axis.bar(x_positions, phases_placeholder, color=[num_to_color[num] for num in phases],
+                        width=1,alpha=0.1, bottom=-4)
+
             axis.plot(timeseries[column_names[j]])
             axis.set_title(column_names[j] , color=color, fontsize=font_size)
             axis.tick_params(labelsize=label_size) # change number sizes in x and y axis
@@ -404,7 +410,13 @@ def plot_timeseries_with_phases(timeseries:            pd.DataFrame or np.ndarra
 
         for j,axis in enumerate(axs[1:]):
             #axs.set_ylabel("unit column j")
+            if merge_phases:
+                phases_placeholder=np.ones(len(phases))*10
+                axis.bar(x_positions, phases_placeholder, color=[num_to_color[num] for num in phases],
+                        width=1,alpha=0.1, bottom=-4)
+
             axis.plot(timeseries[:, j])
+
             axis.set_title(column_names[j], color=color, fontsize=font_size)
             axis.tick_params(labelsize=label_size) # change number sizes in x and y axis
             axis.set_yticks(np.arange(y_lim[0], y_lim[1], y_ticks_delta))
