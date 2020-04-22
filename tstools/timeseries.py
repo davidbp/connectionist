@@ -428,4 +428,114 @@ def plot_timeseries_with_phases(timeseries:            pd.DataFrame or np.ndarra
         plt.savefig(file_to_save)
 
 
+
+def plot_timeseries_overlaped_with_phases(timeseries_1:          pd.DataFrame or np.ndarray,
+                                          timeseries_2:          pd.DataFrame or np.ndarray,
+                                          phases_1:              pd.DataFrame or np.ndarray,
+                                          phases_2:              pd.DataFrame or np.ndarray,
+                                          num_to_color:          dict,
+                                          column_names:          list=[],
+                                          y_phase_values:        list=[],
+                                          fig_size:              tuple=(20,10),
+                                          color:                 str="red", 
+                                          font_size:             int=20,         # size of title
+                                          label_size:            int=15,         # size of the x and y numbers
+                                          dist_between_subplots: float=3.0,      # distance between each plot
+                                          y_lim:                 tuple=(0,1),  
+                                          y_ticks_delta:         float=0.25,
+                                          file_to_save:          str="",         # save if this is not an empy string
+                                         ):
+    '''
+    Function for plotting a multidimensional timeseries passed as dataframe or numpy array.
+
+    The function makes a plot for each column of the dataframe or the numpy array.
+
+    - If `timeseries` is a `np.ndarray` and `column_names` is passed then title of timeseries[:,j] is column_names[j]. 
+
+    - If `timeseries` is a dataframe it will use as title for each column it's own colname. If `column_names` is provided
+      it will use by default what is in `column_names` instead of the original column name in the dataframe.
+
+    '''
+    assert type(timeseries_1) == type(timeseries_2), \
+           "\ntimeseries_1 has type {}, timeseries_2 has type {}. Types should match".format(type(timeseries_1),
+                                                                                             type(timeseries_2))
+    
+    assert isinstance(timeseries_1, pd.DataFrame) or isinstance(timeseries_1, np.ndarray),\
+           "\ntimeseries_1 is not pd.DataFrame or np.ndarray.\n\ttimeseries is {}".format(type(timeseries_1))
+
+    assert isinstance(timeseries_2, pd.DataFrame) or isinstance(timeseries_2, np.ndarray),\
+           "\ntimeseries_2 is not pd.DataFrame or np.ndarray.\n\ttimeseries is {}".format(type(timeseries_2))
+
+        
+    if isinstance(timeseries_1, np.ndarray):
+        if timeseries_1.ndim == 1:
+            timeseries_1 = np.array([timeseries_1]).T
+            timeseries_2 = np.array([timeseries_2]).T
+            
+        if column_names:
+            assert len(column_names) == timeseries_1.shape[1], \
+                "\ntimeseries has {} columns, column_names has {} columns. They should match.".format(len(column_names),
+                                                                                                      timeseries_1.shape[1])
+
+            n_plots = len(column_names)
+        else:
+            n_plots = timeseries_1.shape[1]
+            column_names = ["Column " + str(j) for j in range(n_plots)]
+
+    
+    if isinstance(timeseries_1, pd.DataFrame):
+        column_names = timeseries_1.columns if not column_names else column_names
+        n_plots = len(column_names)
+        
+        
+    fig, axs = plt.subplots(nrows=n_plots+2, ncols=1, figsize=fig_size)
+    x_positions = list(range(len(phases_1)))
+
+    if type(axs) is not np.ndarray:
+        axs = np.array([axs])
+        
+    if isinstance(timeseries_1, pd.DataFrame):
+        axs[0].bar(x_positions, phases_1+1, color=[num_to_color[num] for num in phases_1],width=1)
+        axs[0].set_title("phases from true trace", color=color, fontsize=font_size)
+        axs[0].tick_params(labelsize=label_size) # change number sizes in x and y axis
+        axs[0].set_yticks(y_phase_values)
+
+        axs[1].bar(x_positions, phases_2+1, color=[num_to_color[num] for num in phases_2],width=1)
+        axs[1].set_title("phases from generated trace", color=color, fontsize=font_size)
+        axs[1].tick_params(labelsize=label_size) # change number sizes in x and y axis
+        axs[1].set_yticks(y_phase_values)
+
+
+        for j,axis in enumerate(axs[2:]):
+            #axs.set_ylabel("unit column j")
+            axis.plot(timeseries_1[column_names[j]])
+            axis.plot(timeseries_2[column_names[j]], linestyle='dashed')
+            axis.set_title(column_names[j] , color=color, fontsize=font_size)
+            axis.tick_params(labelsize=label_size) # change number sizes in x and y axis
+            axis.set_yticks(np.arange(0, 1.04, y_ticks_delta))
+
+    if isinstance(timeseries_1, np.ndarray):
+        axs[0].bar(x_positions, phases_1+1, color=[num_to_color[num] for num in phases_1],width=1)
+        axs[0].set_title("phases from true trace", color=color, fontsize=font_size)
+        axs[0].tick_params(labelsize=label_size) # change number sizes in x and y axis
+        axs[0].set_yticks(y_phase_values)
+
+        axs[1].bar(x_positions, phases_2+1, color=[num_to_color[num] for num in phases_2],width=1)
+        axs[1].set_title("phases from generated trace", color=color, fontsize=font_size)
+        axs[1].tick_params(labelsize=label_size) # change number sizes in x and y axis
+        axs[1].set_yticks(y_phase_values)
+
+        for j,axis in enumerate(axs[2:]):
+            #axs.set_ylabel("unit column j")
+            axis.plot(timeseries_1[:, j])
+            axis.plot(timeseries_2[:, j], linestyle='dashed')
+            axis.set_title(column_names[j], color=color, fontsize=font_size)
+            axis.tick_params(labelsize=label_size) # change number sizes in x and y axis
+            axis.set_yticks(np.arange(0, 1.04, y_ticks_delta))
+            axis.set_ylim(y_lim)
+
+    fig.tight_layout(pad=2., w_pad=0., h_pad=dist_between_subplots) 
+
+    if len(file_to_save)>0:
+        plt.savefig(file_to_save)
         
